@@ -2417,6 +2417,9 @@ static __init int msm_thermal_add_cc_nodes(void)
 		goto done_cc_nodes;
 	}
 
+unsigned int temp_threshold = 70;
+module_param(temp_threshold, int, 0644);
+
 	cc_kobj = kobject_create_and_add("core_control", module_kobj);
 	if (!cc_kobj) {
 		pr_err("cannot create core control kobj\n");
