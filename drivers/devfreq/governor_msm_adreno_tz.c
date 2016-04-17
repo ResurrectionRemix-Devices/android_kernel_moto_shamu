@@ -22,7 +22,8 @@
 #include <soc/qcom/scm.h>
 #include "governor.h"
 
-extern bool mdss_screen_on;
+/* Boolean to detect if pm has entered suspend mode */
+static bool suspended = false;
 
 static DEFINE_SPINLOCK(tz_lock);
 
@@ -139,7 +140,7 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq,
 	 * Force to use & record as min freq when system has
 	 * entered pm-suspend or screen-off state.
 	 */
-	if (!mdss_screen_on) {
+	if (suspended) {
 		*freq = devfreq->profile->freq_table[devfreq->profile->max_state - 1];
 		return 0;
 	}
@@ -352,6 +353,8 @@ static int tz_resume(struct devfreq *devfreq)
 {
 	struct devfreq_dev_profile *profile = devfreq->profile;
 	unsigned long freq;
+	
+	suspended = false;
 
 	freq = profile->initial_freq;
 
@@ -361,6 +364,8 @@ static int tz_resume(struct devfreq *devfreq)
 static int tz_suspend(struct devfreq *devfreq)
 {
 	struct devfreq_msm_adreno_tz_data *priv = devfreq->data;
+	
+	suspended = false;
 
 	__secure_tz_entry2(TZ_RESET_ID, 0, 0);
 
