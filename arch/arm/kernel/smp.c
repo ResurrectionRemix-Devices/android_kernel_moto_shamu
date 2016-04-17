@@ -711,7 +711,9 @@ void handle_IPI(int ipinr, struct pt_regs *regs)
 
 void smp_send_reschedule(int cpu)
 {
-	BUG_ON(cpu_is_offline(cpu));
+	if (WARN_ON(cpu_is_offline(cpu))) {
+		return;
+	}
 	smp_cross_call(cpumask_of(cpu), IPI_RESCHEDULE);
 }
 
@@ -769,8 +771,7 @@ static int cpufreq_callback(struct notifier_block *nb,
 	}
 
 	if ((val == CPUFREQ_PRECHANGE  && freq->old < freq->new) ||
-	    (val == CPUFREQ_POSTCHANGE && freq->old > freq->new) ||
-	    (val == CPUFREQ_RESUMECHANGE || val == CPUFREQ_SUSPENDCHANGE)) {
+	    (val == CPUFREQ_POSTCHANGE && freq->old > freq->new)) {
 		loops_per_jiffy = cpufreq_scale(global_l_p_j_ref,
 						global_l_p_j_ref_freq,
 						freq->new);
