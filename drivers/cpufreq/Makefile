@@ -1,5 +1,12 @@
 CFLAGS_cpufreq_impulse.o := -Wno-unused-value
 CFLAGS_cpufreq_yankactive.o := -Wno-sequence-point
+CFLAGS_cpufreq_zzmoove.o := -Wno-misleading-indentation
+CFLAGS_cpufreq_blu_active.o := -Wno-implicit-function-declaration
+CFLAGS_cpufreq_elementalx.o := -Wno-implicit-function-declaration
+CFLAGS_cpufreq_impulse.o := -Wno-implicit-function-declaration
+CFLAGS_cpufreq_barry_allen.o := -Wno-implicit-function-declaration
+CFLAGS_cpufreq_barry_despair.o := -Wno-implicit-function-declaration
+CFLAGS_cpufreq_barry_hellsactive.o := -Wno-implicit-function-declaration
 
 # CPUfreq core
 obj-$(CONFIG_CPU_FREQ)			+= cpufreq.o freq_table.o

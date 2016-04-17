@@ -100,6 +100,8 @@ struct cpufreq_policy {
 	 *     __cpufreq_governor(data, CPUFREQ_GOV_POLICY_EXIT);
 	 */
 	struct rw_semaphore	rwsem;
+
+	unsigned int util;
 };
 
 /* Only for ACPI */
@@ -135,6 +137,7 @@ void cpufreq_sysfs_remove_file(const struct attribute *attr);
 unsigned int cpufreq_get(unsigned int cpu);
 unsigned int cpufreq_quick_get(unsigned int cpu);
 unsigned int cpufreq_quick_get_max(unsigned int cpu);
+unsigned int cpufreq_quick_get_util(unsigned int cpu);
 void disable_cpufreq(void);
 
 u64 get_cpu_idle_time(unsigned int cpu, u64 *wall, int io_busy);
@@ -164,6 +167,7 @@ static inline void disable_cpufreq(void) { }
 
 #define CPUFREQ_RELATION_L 0  /* lowest frequency at or above target */
 #define CPUFREQ_RELATION_H 1  /* highest frequency below or at target */
+#define CPUFREQ_RELATION_C 2  /* closest frequency to target */
 
 struct freq_attr {
 	struct attribute attr;
@@ -223,6 +227,7 @@ struct cpufreq_driver {
 	int	(*bios_limit)	(int cpu, unsigned int *limit);
 
 	int	(*exit)		(struct cpufreq_policy *policy);
+	void	(*stop_cpu)	(struct cpufreq_policy *policy);
 	int	(*suspend)	(struct cpufreq_policy *policy);
 	int	(*resume)	(struct cpufreq_policy *policy);
 	struct freq_attr	**attr;
@@ -258,6 +263,9 @@ int cpufreq_unregister_driver(struct cpufreq_driver *driver_data);
 
 const char *cpufreq_get_current_driver(void);
 
+void cpufreq_notify_utilization(struct cpufreq_policy *policy,
+		unsigned int load);
+
 static inline void cpufreq_verify_within_limits(struct cpufreq_policy *policy,
 		unsigned int min, unsigned int max)
 {
@@ -291,8 +299,6 @@ cpufreq_verify_within_cpu_limits(struct cpufreq_policy *policy)
 /* Transition notifiers */
 #define CPUFREQ_PRECHANGE		(0)
 #define CPUFREQ_POSTCHANGE		(1)
-#define CPUFREQ_RESUMECHANGE		(8)
-#define CPUFREQ_SUSPENDCHANGE		(9)
 
 /* Policy Notifiers  */
 #define CPUFREQ_ADJUST			(0)
@@ -435,7 +441,9 @@ extern struct cpufreq_governor cpufreq_gov_barry_allen;
 #elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_YANKACTIVE)
 extern struct cpufreq_governor cpufreq_gov_yankactive;
 #define CPUFREQ_DEFAULT_GOVERNOR	(&cpufreq_gov_yankactive)
->>>>>>> ef9366d... cpufreq: add yankactive governor
+#elif defined(CONFIG_CPU_FREQ_DEFAULT_GOV_NIGHTMARE)
+extern struct cpufreq_governor cpufreq_gov_nightmare;
+#define CPUFREQ_DEFAULT_GOVERNOR (&cpufreq_gov_nightmare)
 #endif
 
 /*********************************************************************
