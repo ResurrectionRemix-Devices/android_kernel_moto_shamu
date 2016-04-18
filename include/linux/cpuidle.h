@@ -113,20 +113,11 @@ struct cpuidle_driver {
 	int			safe_state_index;
 
 	/* the driver handles the cpus in cpumask */
-	struct cpumask       *cpumask;
+	struct cpumask		*cpumask;
 };
 
 #ifdef CONFIG_CPU_IDLE
 extern void disable_cpuidle(void);
-
-extern int cpuidle_enabled(struct cpuidle_driver *drv,
-			  struct cpuidle_device *dev);
-extern int cpuidle_select(struct cpuidle_driver *drv,
-			  struct cpuidle_device *dev);
-extern int cpuidle_enter(struct cpuidle_driver *drv,
-			 struct cpuidle_device *dev, int index);
-extern void cpuidle_reflect(struct cpuidle_device *dev, int index);
-
 extern int cpuidle_idle_call(void);
 extern int cpuidle_register_driver(struct cpuidle_driver *drv);
 extern struct cpuidle_driver *cpuidle_get_driver(void);
@@ -149,16 +140,6 @@ extern int cpuidle_play_dead(void);
 extern struct cpuidle_driver *cpuidle_get_cpu_driver(struct cpuidle_device *dev);
 #else
 static inline void disable_cpuidle(void) { }
-static inline int cpuidle_enabled(struct cpuidle_driver *drv,
-				  struct cpuidle_device *dev)
-{return -ENODEV; }
-static inline int cpuidle_select(struct cpuidle_driver *drv,
-				 struct cpuidle_device *dev)
-{return -ENODEV; }
-static inline int cpuidle_enter(struct cpuidle_driver *drv,
-				struct cpuidle_device *dev, int index)
-{return -ENODEV; }
-static inline void cpuidle_reflect(struct cpuidle_device *dev, int index) { }
 static inline int cpuidle_idle_call(void) { return -ENODEV; }
 static inline int cpuidle_register_driver(struct cpuidle_driver *drv)
 {return -ENODEV; }

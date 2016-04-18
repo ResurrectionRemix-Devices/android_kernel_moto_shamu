@@ -29,6 +29,9 @@
 #include <linux/rcupdate.h>
 #include "input-compat.h"
 
+bool disable_release_keys = false;
+module_param(disable_release_keys, bool, 0755);
+
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_DESCRIPTION("Input core");
 MODULE_LICENSE("GPL");
@@ -1651,7 +1654,7 @@ static void input_dev_toggle(struct input_dev *dev, bool activate)
  *
  * This function tries to reset the state of an opened input device and
  * bring internal state and state if the hardware in sync with each other.
- * We mark all keys as released, restore LED state, repeat rate, etc.
+ * mark all keys as released, repeat rate, etc.
  */
 void input_reset_device(struct input_dev *dev)
 {
@@ -1664,7 +1667,8 @@ void input_reset_device(struct input_dev *dev)
 		 * Keys that have been pressed at suspend time are unlikely
 		 * to be still pressed when we resume.
 		 */
-		if (!test_bit(INPUT_PROP_NO_DUMMY_RELEASE, dev->propbit)) {
+		if (!test_bit(INPUT_PROP_NO_DUMMY_RELEASE, dev->propbit) &&
+				!disable_release_keys) {
 			spin_lock_irq(&dev->event_lock);
 			input_dev_release_keys(dev);
 			spin_unlock_irq(&dev->event_lock);
@@ -1932,22 +1936,18 @@ static unsigned int input_estimate_events_per_packet(struct input_dev *dev)
 
 	events = mt_slots + 1; /* count SYN_MT_REPORT and SYN_REPORT */
 
-	if (test_bit(EV_ABS, dev->evbit)) {
-		for (i = 0; i < ABS_CNT; i++) {
-			if (test_bit(i, dev->absbit)) {
-				if (input_is_mt_axis(i))
-					events += mt_slots;
-				else
-					events++;
-			}
+	for (i = 0; i < ABS_CNT; i++) {
+		if (test_bit(i, dev->absbit)) {
+			if (input_is_mt_axis(i))
+				events += mt_slots;
+			else
+				events++;
 		}
 	}
 
-	if (test_bit(EV_REL, dev->evbit)) {
-		for (i = 0; i < REL_CNT; i++)
-			if (test_bit(i, dev->relbit))
-				events++;
-	}
+	for (i = 0; i < REL_CNT; i++)
+		if (test_bit(i, dev->relbit))
+			events++;
 
 	/* Make room for KEY and MSC events */
 	events += 7;
