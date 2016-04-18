@@ -14,7 +14,6 @@
 
 #include <linux/slab.h>
 #include "cpufreq_governor.h"
-#include <linux/touchboost.h>
 
 /* Conservative governor macros */
 #define DEF_FREQUENCY_UP_THRESHOLD		(95)
