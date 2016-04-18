@@ -34,6 +34,7 @@
 /* 2 is to account for module & param ID in payload */
 #define ADM_GET_PARAMETER_LENGTH  (4096 - APR_HDR_SIZE - 2 * sizeof(uint32_t))
 
+#define ULL_SUPPORTED_BITS_PER_SAMPLE 16
 #define ULL_SUPPORTED_SAMPLE_RATE 48000
 
 
@@ -872,7 +873,6 @@ void send_adm_custom_topology(int port_id)
 
 	get_adm_custom_topology(&cal_block);
 	if (cal_block.cal_size == 0) {
-		pr_err("%s: no cal to send\n", __func__);
 		pr_debug("%s: no cal to send addr= 0x%pa\n",
 				__func__, &cal_block.cal_paddr);
 		goto done;
@@ -1417,6 +1417,7 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 			if (perf_mode == ULTRA_LOW_LATENCY_PCM_MODE) {
 				open.topology_id = NULL_COPP_TOPOLOGY;
 				rate = ULL_SUPPORTED_SAMPLE_RATE;
+				open.bit_width = ULL_SUPPORTED_BITS_PER_SAMPLE;
 			} else if (perf_mode == LOW_LATENCY_PCM_MODE) {
 				if ((open.topology_id ==
 					DOLBY_ADM_COPP_TOPOLOGY_ID) ||

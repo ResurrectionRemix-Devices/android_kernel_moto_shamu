@@ -2854,8 +2854,7 @@ static void handle_stripe_dirtying(struct r5conf *conf,
 	 * generate correct data from the parity.
 	 */
 	if (conf->max_degraded == 2 ||
-	    (recovery_cp < MaxSector && sh->sector >= recovery_cp &&
-	     s->failed == 0)) {
+	    (recovery_cp < MaxSector && sh->sector >= recovery_cp)) {
 		/* Calculate the real rcw later - for now make it
 		 * look like rcw is cheaper
 		 */
@@ -4155,7 +4154,7 @@ static void raid5_unplug(struct blk_plug_cb *blk_cb, bool from_schedule)
 			 * STRIPE_ON_UNPLUG_LIST clear but the stripe
 			 * is still in our list
 			 */
-			smp_mb__before_clear_bit();
+			smp_mb__before_atomic();
 			clear_bit(STRIPE_ON_UNPLUG_LIST, &sh->state);
 			__release_stripe(conf, sh);
 			cnt++;

@@ -58,8 +58,10 @@
  */
 #if __LINUX_ARM_ARCH__ >= 5
 #define PLD(code...)	code
+#define NO_PLD(code...)
 #else
 #define PLD(code...)
+#define NO_PLD(code...) code
 #endif
 
 /*
@@ -212,9 +214,9 @@
 #ifdef CONFIG_SMP
 #if __LINUX_ARM_ARCH__ >= 7
 	.ifeqs "\mode","arm"
-	ALT_SMP(dmb)
+	ALT_SMP(dmb	ish)
 	.else
-	ALT_SMP(W(dmb))
+	ALT_SMP(W(dmb)	ish)
 	.endif
 #elif __LINUX_ARM_ARCH__ == 6
 	ALT_SMP(mcr	p15, 0, r0, c7, c10, 5)	@ dmb

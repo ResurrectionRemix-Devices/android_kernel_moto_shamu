@@ -25,7 +25,7 @@
 
 #define INTELLI_PLUG			"intelli_plug"
 #define INTELLI_PLUG_MAJOR_VERSION	5
-#define INTELLI_PLUG_MINOR_VERSION	0
+#define INTELLI_PLUG_MINOR_VERSION	1
 
 #define DEF_SAMPLING_MS			268
 #define RESUME_SAMPLING_MS		HZ / 10
@@ -40,7 +40,9 @@
 #define DEFAULT_MAX_CPUS_ONLINE_SUSP	1
 
 #define CAPACITY_RESERVE		50
-#if defined(CONFIG_ARCH_MSM8960) || defined(CONFIG_ARCH_APQ8064) || \
+#if defined(CONFIG_ARCH_APQ8084) || defined(CONFIG_ARM64)
+#define THREAD_CAPACITY (430 - CAPACITY_RESERVE)
+#elif defined(CONFIG_ARCH_MSM8960) || defined(CONFIG_ARCH_APQ8064) || \
 defined(CONFIG_ARCH_MSM8974)
 #define THREAD_CAPACITY			(339 - CAPACITY_RESERVE)
 #elif defined(CONFIG_ARCH_MSM8226) || defined (CONFIG_ARCH_MSM8926) || \
@@ -168,12 +170,6 @@ static void remove_down_lock(struct work_struct *work)
 	dl->locked = 0;
 }
 
-static int check_down_lock(unsigned int cpu)
-{
-	struct down_lock *dl = &per_cpu(lock_info, cpu);
-	return dl->locked;
-}
-
 static unsigned int calculate_thread_stats(void)
 {
 	unsigned int avg_nr_run = avg_nr_running();
@@ -241,8 +237,6 @@ static void __ref cpu_up_down_work(struct work_struct *work)
 		for_each_online_cpu(cpu) {
 			if (cpu == 0)
 				continue;
-			if (check_down_lock(cpu) || check_cpuboost(cpu))
-				break;
 			l_nr_threshold =
 				cpu_nr_run_threshold << 1 / (num_online_cpus());
 			l_ip_info = &per_cpu(ip_info, cpu);
@@ -326,7 +320,6 @@ static void __ref intelli_plug_resume(void)
 		}
 	}
 
-	if (wakeup_boost || required_wakeup) {
 		/* Fire up all CPUs */
 		for_each_cpu_not(cpu, cpu_online_mask) {
 			if (cpu == 0)
@@ -334,7 +327,6 @@ static void __ref intelli_plug_resume(void)
 			cpu_up(cpu);
 			apply_down_lock(cpu);
 		}
-	}
 
 	/* Resume hotplug workqueue if required */
 	if (required_reschedule)
@@ -704,7 +696,7 @@ static ssize_t store_max_cpus_online_susp(struct kobject *kobj,
 
 #define KERNEL_ATTR_RW(_name) \
 static struct kobj_attribute _name##_attr = \
-	__ATTR(_name, 0644, show_##_name, store_##_name)
+	__ATTR(_name, 0664, show_##_name, store_##_name)
 
 KERNEL_ATTR_RW(intelli_plug_active);
 KERNEL_ATTR_RW(cpus_boosted);
@@ -770,6 +762,6 @@ late_initcall(intelli_plug_init);
 module_exit(intelli_plug_exit);
 
 MODULE_AUTHOR("Paul Reioux <reioux@gmail.com>");
-MODULE_DESCRIPTION("'intell_plug' - An intelligent cpu hotplug driver for "
+MODULE_DESCRIPTION("'intelli_plug' - An intelligent cpu hotplug driver for "
 	"Low Latency Frequency Transition capable processors");
 MODULE_LICENSE("GPLv2");

@@ -630,7 +630,7 @@ void smp_send_all_cpu_backtrace(void)
 	}
 
 	clear_bit(0, &backtrace_flag);
-	smp_mb__after_clear_bit();
+	smp_mb__after_atomic();
 }
 
 /*
@@ -771,7 +771,8 @@ static int cpufreq_callback(struct notifier_block *nb,
 	}
 
 	if ((val == CPUFREQ_PRECHANGE  && freq->old < freq->new) ||
-	    (val == CPUFREQ_POSTCHANGE && freq->old > freq->new)) {
+	    (val == CPUFREQ_POSTCHANGE && freq->old > freq->new) ||
+	    (val == CPUFREQ_RESUMECHANGE || val == CPUFREQ_SUSPENDCHANGE)) {
 		loops_per_jiffy = cpufreq_scale(global_l_p_j_ref,
 						global_l_p_j_ref_freq,
 						freq->new);

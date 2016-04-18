@@ -55,7 +55,7 @@ static int kmem_cache_sanity_check(struct mem_cgroup *memcg, const char *name,
 			continue;
 		}
 
-#if !defined(CONFIG_SLUB) || !defined(CONFIG_SLUB_DEBUG_ON)
+#if !defined(CONFIG_SLUB)
 		/*
 		 * For simplicity, we won't check this in the list of memcg
 		 * caches. We have control over memcg naming, and if there
@@ -186,9 +186,11 @@ kmem_cache_create_memcg(struct mem_cgroup *memcg, const char *name, size_t size,
 	 */
 	flags &= CACHE_CREATE_MASK;
 
-	s = __kmem_cache_alias(memcg, name, size, align, flags, ctor);
-	if (s)
-		goto out_locked;
+	if (!memcg) {
+		s = __kmem_cache_alias(name, size, align, flags, ctor);
+		if (s)
+			goto out_locked;
+	}
 
 	s = kmem_cache_zalloc(kmem_cache, GFP_KERNEL);
 	if (s) {
@@ -226,6 +228,15 @@ out_locked:
 	put_online_cpus();
 
 	if (err) {
+		/*
+		 * There is no point in flooding logs with warnings or
+		 * especially crashing the system if we fail to create a cache
+		 * for a memcg. In this case we will be accounting the memcg
+		 * allocation to the root cgroup until we succeed to create its
+		 * own cache, but it isn't that critical.
+		 */
+		if (!memcg)
+			return NULL;
 
 		if (flags & SLAB_PANIC)
 			panic("kmem_cache_create: Failed to create slab '%s'. Error %d\n",
@@ -252,6 +263,9 @@ EXPORT_SYMBOL(kmem_cache_create);
 
 void kmem_cache_destroy(struct kmem_cache *s)
 {
+	if (unlikely(!s))
+		return;
+
 	/* Destroy all the children caches if we aren't a memcg cache */
 	kmem_cache_destroy_memcg_children(s);
 
@@ -554,7 +568,7 @@ memcg_accumulate_slabinfo(struct kmem_cache *s, struct slabinfo *info)
 		return;
 
 	for_each_memcg_cache_index(i) {
-		c = cache_from_memcg(s, i);
+		c = cache_from_memcg_idx(s, i);
 		if (!c)
 			continue;
 

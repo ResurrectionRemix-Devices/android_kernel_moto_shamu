@@ -208,7 +208,7 @@ static struct msm_cpp_buff_queue_info_t *msm_cpp_get_buff_queue_entry(
 	}
 
 	if (buff_queue_info == NULL) {
-		pr_err("error buffer queue entry for sess:%d strm:%d not found\n",
+		CPP_DBG("buffer queue entry for sess:%d strm:%d not found\n",
 			session_id, stream_id);
 	}
 	return buff_queue_info;
@@ -1878,7 +1878,7 @@ long msm_cpp_subdev_ioctl(struct v4l2_subdev *sd,
 			&buff_mgr_info);
 		if (rc < 0) {
 			rc = -EAGAIN;
-			pr_err("error getting buffer rc:%d\n", rc);
+			pr_err_ratelimited("error getting buffer rc:%d\n", rc);
 			break;
 		}
 		buff_mgr_info.frame_id = frame_info.frame_id;

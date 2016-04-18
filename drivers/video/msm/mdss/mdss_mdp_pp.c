@@ -424,7 +424,6 @@ static void pp_ad_bypass_config(struct mdss_ad_info *ad,
 				struct mdss_mdp_ctl *ctl, u32 num, u32 *opmode);
 static int mdss_mdp_ad_setup(struct msm_fb_data_type *mfd);
 static void pp_ad_cfg_lut(char __iomem *addr, u32 *data);
-static struct msm_fb_data_type *mdss_get_mfd_from_index(int index);
 static int pp_ad_attenuate_bl(u32 bl, u32 *bl_out,
 		struct msm_fb_data_type *mfd);
 static int pp_num_to_side(struct mdss_mdp_ctl *ctl, u32 num);
@@ -2795,17 +2794,11 @@ int mdss_mdp_argc_config(struct mdp_pgc_lut_data *config,
 		argc_addr = mdss_mdp_get_mixer_addr_off(dspp_num) +
 			MDSS_MDP_REG_LM_GC_LUT_BASE;
 		pgc_ptr = &mdss_pp_res->argc_disp_cfg[disp_num];
-		if (config->flags & MDP_PP_OPS_WRITE)
-			mdss_pp_res->pp_disp_flags[disp_num] |=
-				PP_FLAGS_DIRTY_ARGC;
 		break;
 	case MDSS_PP_DSPP_CFG:
 		argc_addr = mdss_mdp_get_dspp_addr_off(dspp_num) +
 					MDSS_MDP_REG_DSPP_GC_BASE;
 		pgc_ptr = &mdss_pp_res->pgc_disp_cfg[disp_num];
-		if (config->flags & MDP_PP_OPS_WRITE)
-			mdss_pp_res->pp_disp_flags[disp_num] |=
-				PP_FLAGS_DIRTY_PGC;
 		break;
 	default:
 		goto argc_config_exit;
@@ -2885,6 +2878,12 @@ int mdss_mdp_argc_config(struct mdp_pgc_lut_data *config,
 			&mdss_pp_res->gc_lut_g[disp_num][0];
 		pgc_ptr->b_data =
 			&mdss_pp_res->gc_lut_b[disp_num][0];
+		if (PP_LOCAT(config->block) == MDSS_PP_LM_CFG)
+			mdss_pp_res->pp_disp_flags[disp_num] |=
+				PP_FLAGS_DIRTY_ARGC;
+		else if (PP_LOCAT(config->block) == MDSS_PP_DSPP_CFG)
+			mdss_pp_res->pp_disp_flags[disp_num] |=
+				PP_FLAGS_DIRTY_PGC;
 	}
 argc_config_exit:
 	mutex_unlock(&mdss_pp_mutex);

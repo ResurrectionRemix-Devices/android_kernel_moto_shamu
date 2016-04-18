@@ -629,10 +629,10 @@ static char * const migratetype_names[MIGRATE_TYPES] = {
 	"Unmovable",
 	"Reclaimable",
 	"Movable",
-	"Reserve",
 #ifdef CONFIG_CMA
 	"CMA",
 #endif
+	"Reserve",
 #ifdef CONFIG_MEMORY_ISOLATION
 	"Isolate",
 #endif
@@ -742,6 +742,10 @@ const char * const vmstat_text[] = {
 #endif
 	"nr_anon_transparent_hugepages",
 	"nr_free_cma",
+	"nr_swapcache",
+	"nr_ion",
+	"nr_ion_pool",
+	"nr_ion_cma",
 	"nr_dirty_threshold",
 	"nr_dirty_background_threshold",
 

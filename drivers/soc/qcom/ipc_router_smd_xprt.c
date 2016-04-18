@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,10 +23,10 @@
 #include <linux/skbuff.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
-#include <soc/qcom/subsystem_restart.h>
 
-#include <mach/msm_smd.h>
-#include <mach/msm_smsm.h>
+#include <soc/qcom/smd.h>
+#include <soc/qcom/smsm.h>
+#include <soc/qcom/subsystem_restart.h>
 
 static int msm_ipc_router_smd_xprt_debug_mask;
 module_param_named(debug_mask, msm_ipc_router_smd_xprt_debug_mask,
@@ -182,7 +182,7 @@ static int msm_ipc_router_smd_remote_write(void *data,
 	if (!len || pkt->length != len)
 		return -EINVAL;
 
-	while ((ret = smd_write_start(smd_xprtp->channel, len)) < 0) {
+	do {
 		spin_lock_irqsave(&smd_xprtp->ss_reset_lock, flags);
 		if (smd_xprtp->ss_reset) {
 			spin_unlock_irqrestore(&smd_xprtp->ss_reset_lock,
@@ -192,14 +192,16 @@ static int msm_ipc_router_smd_remote_write(void *data,
 			return -ENETRESET;
 		}
 		spin_unlock_irqrestore(&smd_xprtp->ss_reset_lock, flags);
-		if (num_retries >= 5) {
+		ret = smd_write_start(smd_xprtp->channel, len);
+		if (ret < 0 && num_retries >= 5) {
 			IPC_RTR_ERR("%s: Error %d @smd_write_start for %s\n",
 				__func__, ret, xprt->name);
 			return ret;
+		} else if (ret < 0) {
+			msleep(50);
+			num_retries++;
 		}
-		msleep(50);
-		num_retries++;
-	}
+	} while (ret < 0);
 
 	D("%s: Ready to write %d bytes\n", __func__, len);
 	skb_queue_walk(pkt->pkt_fragment_q, ipc_rtr_pkt) {
@@ -376,6 +378,11 @@ static void smd_xprt_close_event(struct work_struct *work)
 		container_of(xprt_work->xprt,
 			     struct msm_ipc_router_smd_xprt, xprt);
 
+	if (smd_xprtp->in_pkt) {
+		release_pkt(smd_xprtp->in_pkt);
+		smd_xprtp->in_pkt = NULL;
+	}
+	smd_xprtp->is_partial_in_pkt = 0;
 	init_completion(&smd_xprtp->sft_close_complete);
 	msm_ipc_router_xprt_notify(xprt_work->xprt,
 				IPC_ROUTER_XPRT_EVENT_CLOSE, NULL);

@@ -613,6 +613,12 @@ static int nl80211_msg_put_channel(struct sk_buff *msg,
 		if ((chan->flags & IEEE80211_CHAN_NO_160MHZ) &&
 		    nla_put_flag(msg, NL80211_FREQUENCY_ATTR_NO_160MHZ))
 			goto nla_put_failure;
+		if ((chan->flags & IEEE80211_CHAN_INDOOR_ONLY) &&
+		    nla_put_flag(msg, NL80211_FREQUENCY_ATTR_INDOOR_ONLY))
+			goto nla_put_failure;
+		if ((chan->flags & IEEE80211_CHAN_GO_CONCURRENT) &&
+		    nla_put_flag(msg, NL80211_FREQUENCY_ATTR_GO_CONCURRENT))
+			goto nla_put_failure;
 	}
 
 	if (nla_put_u32(msg, NL80211_FREQUENCY_ATTR_MAX_TX_POWER,
@@ -5316,23 +5322,6 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 		if (wiphy->bands[i])
 			request->rates[i] =
 				(1 << wiphy->bands[i]->n_bitrates) - 1;
-	if (info->attrs[NL80211_ATTR_SCAN_SUPP_RATES]) {
-		nla_for_each_nested(attr,
-				    info->attrs[NL80211_ATTR_SCAN_SUPP_RATES],
-				    tmp) {
-			enum ieee80211_band band = nla_type(attr);
-			if (band < 0 || band >= IEEE80211_NUM_BANDS) {
-				err = -EINVAL;
-				goto out_free;
-			}
-			err = ieee80211_get_ratemask(wiphy->bands[band],
-						     nla_data(attr),
-						     nla_len(attr),
-						     &request->rates[band]);
-			if (err)
-				goto out_free;
-		}
-	}
 
 	for (i = 0; i < IEEE80211_NUM_BANDS; i++)
 		if (wiphy->bands[i])
@@ -5725,6 +5714,9 @@ static int nl80211_start_radar_detection(struct sk_buff *skb,
 	err = nl80211_parse_chandef(rdev, info, &chandef);
 	if (err)
 		return err;
+
+	if (rdev->wiphy.flags & WIPHY_FLAG_DFS_OFFLOAD)
+		return -EOPNOTSUPP;
 
 	if (wdev->cac_started)
 		return -EBUSY;
@@ -6796,6 +6788,9 @@ void __cfg80211_send_event_skb(struct sk_buff *skb, gfp_t gfp)
 	struct cfg80211_registered_device *rdev = ((void **)skb->cb)[0];
 	void *hdr = ((void **)skb->cb)[1];
 	struct nlattr *data = ((void **)skb->cb)[2];
+
+	/* clear CB data for netlink core to own from now on */
+	memset(skb->cb, 0, sizeof(skb->cb));
 
 	nla_nest_end(skb, data);
 	genlmsg_end(skb, hdr);
@@ -8601,6 +8596,9 @@ int cfg80211_vendor_cmd_reply(struct sk_buff *skb)
 	struct cfg80211_registered_device *rdev = ((void **)skb->cb)[0];
 	void *hdr = ((void **)skb->cb)[1];
 	struct nlattr *data = ((void **)skb->cb)[2];
+
+	/* clear CB data for netlink core to own from now on */
+	memset(skb->cb, 0, sizeof(skb->cb));
 
 	if (WARN_ON(!rdev->cur_cmd_info)) {
 		kfree_skb(skb);

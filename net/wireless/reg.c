@@ -712,6 +712,8 @@ static u32 map_regdom_flags(u32 rd_flags)
 		channel_flags |= IEEE80211_CHAN_RADAR;
 	if (rd_flags & NL80211_RRF_NO_OFDM)
 		channel_flags |= IEEE80211_CHAN_NO_OFDM;
+	if (rd_flags & NL80211_RRF_NO_OUTDOOR)
+		channel_flags |= IEEE80211_CHAN_INDOOR_ONLY;
 	return channel_flags;
 }
 
@@ -1384,22 +1386,13 @@ get_reg_request_treatment(struct wiphy *wiphy,
 		}
 		return 0;
 	case NL80211_REGDOM_SET_BY_DRIVER:
-		if (lr->initiator == NL80211_REGDOM_SET_BY_CORE) {
-			if (regdom_changes(pending_request->alpha2))
-				return REG_REQ_OK;
-			return REG_REQ_ALREADY_SET;
-		}
 
-		/*
-		 * This would happen if you unplug and plug your card
-		 * back in or if you add a new device for which the previously
-		 * loaded card also agrees on the regulatory domain.
-		 */
-		if (lr->initiator == NL80211_REGDOM_SET_BY_DRIVER &&
-		    !regdom_changes(pending_request->alpha2))
+		if (!regdom_changes(pending_request->alpha2))
 			return REG_REQ_ALREADY_SET;
-
-		return REG_REQ_INTERSECT;
+		if (lr->initiator == NL80211_REGDOM_SET_BY_USER)
+			return REG_REQ_INTERSECT;
+		else
+			return REG_REQ_OK;
 	case NL80211_REGDOM_SET_BY_USER:
 		if (reg_request_cell_base(pending_request))
 			return reg_ignore_cell_hint(pending_request);
@@ -1581,8 +1574,8 @@ static void reg_process_hint(struct regulatory_request *reg_request,
 		break;
 	default:
 		if (reg_initiator == NL80211_REGDOM_SET_BY_USER)
-			schedule_delayed_work(&reg_timeout,
-					      msecs_to_jiffies(3142));
+			queue_delayed_work(system_power_efficient_wq,
+					   &reg_timeout, msecs_to_jiffies(3142));
 		break;
 	}
 }
@@ -2184,7 +2177,8 @@ static int __set_regdom(const struct ieee80211_regdomain *rd)
 	if (!request_wiphy &&
 	    (lr->initiator == NL80211_REGDOM_SET_BY_DRIVER ||
 	     lr->initiator == NL80211_REGDOM_SET_BY_COUNTRY_IE)) {
-		schedule_delayed_work(&reg_timeout, 0);
+		queue_delayed_work(system_power_efficient_wq,
+				   &reg_timeout, 0);
 		return -ENODEV;
 	}
 

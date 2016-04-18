@@ -191,6 +191,12 @@ enum sdc_mpm_pin_state {
 #define sdhci_is_valid_mpm_wakeup_int(_h) ((_h)->pdata->mpm_sdiowakeup_int >= 0)
 #define sdhci_is_valid_gpio_wakeup_int(_h) ((_h)->pdata->sdiowakeup_irq >= 0)
 
+#define NUM_TUNING_PHASES		16
+#define MAX_DRV_TYPES_SUPPORTED_HS200	3
+
+/* Timeout value to avoid infinite waiting for pwr_irq */
+#define MSM_PWR_IRQ_TIMEOUT_MS 5000
+
 static const u32 tuning_block_64[] = {
 	0x00FF0FFF, 0xCCC3CCFF, 0xFFCC3CC3, 0xEFFEFFFE,
 	0xDDFFDFFF, 0xFBFFFBFF, 0xFF7FFFBF, 0xEFBDF777,
@@ -2225,6 +2231,18 @@ static irqreturn_t sdhci_msm_sdiowakeup_irq(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+void sdhci_msm_dump_pwr_ctrl_regs(struct sdhci_host *host)
+{
+	struct sdhci_pltfm_host *pltfm_host = sdhci_priv(host);
+	struct sdhci_msm_host *msm_host = pltfm_host->priv;
+
+	pr_err("%s: PWRCTL_STATUS: 0x%08x | PWRCTL_MASK: 0x%08x | PWRCTL_CTL: 0x%08x\n",
+		mmc_hostname(host->mmc),
+		readl_relaxed(msm_host->core_mem + CORE_PWRCTL_STATUS),
+		readl_relaxed(msm_host->core_mem + CORE_PWRCTL_MASK),
+		readl_relaxed(msm_host->core_mem + CORE_PWRCTL_CTL));
+}
+
 static irqreturn_t sdhci_msm_pwr_irq(int irq, void *data)
 {
 	struct sdhci_host *host = (struct sdhci_host *)data;
@@ -2235,6 +2253,7 @@ static irqreturn_t sdhci_msm_pwr_irq(int irq, void *data)
 	int ret = 0;
 	int pwr_state = 0, io_level = 0;
 	unsigned long flags;
+	int retry = 10;
 
 	irq_status = readb_relaxed(msm_host->core_mem + CORE_PWRCTL_STATUS);
 	pr_debug("%s: Received IRQ(%d), status=0x%x\n",
@@ -2249,6 +2268,29 @@ static irqreturn_t sdhci_msm_pwr_irq(int irq, void *data)
 	 * completed before its next update to registers within hc_mem.
 	 */
 	mb();
+	/*
+	 * There is a rare HW scenario where the first clear pulse could be
+	 * lost when actual reset and clear/read of status register is
+	 * happening at a time. Hence, retry for at least 10 times to make
+	 * sure status register is cleared. Otherwise, this will result in
+	 * a spurious power IRQ resulting in system instability.
+	 */
+	while (irq_status &
+		readb_relaxed(msm_host->core_mem + CORE_PWRCTL_STATUS)) {
+		if (retry == 0) {
+			pr_err("%s: Timedout clearing (0x%x) pwrctl status register\n",
+				mmc_hostname(host->mmc), irq_status);
+			sdhci_msm_dump_pwr_ctrl_regs(host);
+			BUG_ON(1);
+		}
+		writeb_relaxed(irq_status,
+				(msm_host->core_mem + CORE_PWRCTL_CLEAR));
+		retry--;
+		udelay(10);
+	}
+	if (likely(retry < 10))
+		pr_debug("%s: success clearing (0x%x) pwrctl status register, retries left %d\n",
+				mmc_hostname(host->mmc), irq_status, retry);
 
 	/* Handle BUS ON/OFF*/
 	if (irq_status & CORE_PWRCTL_BUS_ON) {
@@ -2451,8 +2493,10 @@ static void sdhci_msm_check_power_status(struct sdhci_host *host, u32 req_type)
 	 */
 	if (done)
 		init_completion(&msm_host->pwr_irq_completion);
-	else
-		wait_for_completion(&msm_host->pwr_irq_completion);
+	else if (!wait_for_completion_timeout(&msm_host->pwr_irq_completion,
+				msecs_to_jiffies(MSM_PWR_IRQ_TIMEOUT_MS)))
+		__WARN_printf("%s: request(%d) timed out waiting for pwr_irq\n",
+					mmc_hostname(host->mmc), req_type);
 
 	pr_debug("%s: %s: request %d done\n", mmc_hostname(host->mmc),
 			__func__, req_type);
@@ -3358,6 +3402,10 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	/* Reset the core and Enable SDHC mode */
 	core_memres = platform_get_resource_byname(pdev,
 				IORESOURCE_MEM, "core_mem");
+	if (!core_memres) {
+		dev_err(&pdev->dev, "Failed to get iomem resource\n");
+		goto vreg_deinit;
+	}
 	msm_host->core_mem = devm_ioremap(&pdev->dev, core_memres->start,
 					resource_size(core_memres));
 
@@ -3500,6 +3548,13 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 	init_completion(&msm_host->pwr_irq_completion);
 
 	if (gpio_is_valid(msm_host->pdata->status_gpio)) {
+		/*
+		 * Set up the card detect GPIO in active configuration before
+		 * configuring it as an IRQ. Otherwise, it can be in some
+		 * weird/inconsistent state resulting in flood of interrupts.
+		 */
+		sdhci_msm_setup_pins(msm_host->pdata, true);
+
 		ret = mmc_gpio_request_cd(msm_host->mmc,
 				msm_host->pdata->status_gpio);
 		if (ret) {
@@ -3526,7 +3581,7 @@ static int sdhci_msm_probe(struct platform_device *pdev)
 		msm_host->is_sdiowakeup_enabled = true;
 		ret = request_irq(msm_host->pdata->sdiowakeup_irq,
 				  sdhci_msm_sdiowakeup_irq,
-				  IRQF_SHARED | IRQF_TRIGGER_LOW,
+				  IRQF_SHARED | IRQF_TRIGGER_HIGH,
 				  "sdhci-msm sdiowakeup", host);
 		if (ret) {
 			dev_err(&pdev->dev, "%s: request sdiowakeup IRQ %d: failed: %d\n",

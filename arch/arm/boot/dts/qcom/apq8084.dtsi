@@ -778,6 +778,7 @@
 		qcom,msm-bus,vectors-KBps =
 				<56 512 0 0>,
 				<56 512 3936000 393600>;
+		qcom,ce-opp-freq = <171430000>;
 	};
 
         qcom,qcrypto@fd440000 {
@@ -799,28 +800,7 @@
 		qcom,msm-bus,vectors-KBps =
 				<56 512 0 0>,
 				<56 512 3936000 393600>;
-	};
-
-	qcom,qcrypto1@fd440000 {
-		status = "disabled";
-		compatible = "qcom,qcrypto";
-		reg = <0xfd440000 0x20000>,
-		      <0xfd444000 0x1b000>;
-		reg-names = "crypto-base","crypto-bam-base";
-		interrupts = <0 236 0>;
-		qcom,bam-pipe-pair = <0>;
-		qcom,ce-hw-instance = <1>;
-		qcom,ce-device = <1>;
-		qcom,clk-mgmt-sus-res;
-                qcom,msm-bus,name = "qcrypto-noc";
-		qcom,msm-bus,num-cases = <2>;
-		qcom,msm-bus,num-paths = <1>;
-		qcom,use-sw-aes-cbc-ecb-ctr-algo;
-		qcom,use-sw-aes-xts-algo;
-		qcom,use-sw-ahash-algo;
-		qcom,msm-bus,vectors-KBps =
-				<56 512 0 0>,
-				<56 512 3936000 393600>;
+		qcom,ce-opp-freq = <171430000>;
 	};
 
 	wcd9xxx_intc: wcd9xxx-irq {
@@ -1090,7 +1070,6 @@
 		qcom,sda-gpio = <&msmgpio 61 0>;
 		qcom,scl-gpio = <&msmgpio 62 0>;
 		qcom,master-id = <84>;
-		qcom,extended-recovery = <1>;
 	};
 
 	qcom,clock-krait@f9016000 {
@@ -4622,8 +4601,8 @@
 			qcom,smd-edge = <1>;
 			qcom,smd-irq-offset = <0x8>;
 			qcom,smd-irq-bitmask = <0x100>;
-			qcom,pil-string = "adsp";
 			interrupts = <0 156 1>;
+			label = "adsp";
 		};
 
 		qcom,smsm-adsp {
@@ -4640,7 +4619,9 @@
 			qcom,smd-irq-offset = <0x8>;
 			qcom,smd-irq-bitmask = <0x1>;
 			interrupts = <0 168 1>;
+			label = "rpm";
 			qcom,irq-no-suspend;
+			qcom,not-loadable;
 		};
 	};
 
@@ -4797,8 +4778,8 @@
 		compatible = "qcom,msm-watchdog";
 		reg = <0xf9017000 0x1000>;
 		interrupts = <0 3 0>, <0 4 0>;
-		qcom,bark-time = <21000>;
-		qcom,pet-time = <20000>;
+		qcom,bark-time = <11000>;
+		qcom,pet-time = <10000>;
 		qcom,ipi-ping;
 	};
 
@@ -4841,10 +4822,9 @@
 
 	qcom,bcl {
 		compatible = "qcom,bcl";
-		qcom,bcl-disable;
+		qcom,bcl-enable;
 		qcom,ibat-vadc = <&pma8084_vadc>;
 		qcom,ibat-threshold-adc_tm = <&pma8084_adc_tm>;
-		qcom,bcl-hotplug-list = <&CPU2 &CPU3>;
 		qcom,ibat-monitor {
 			high-threshold-uamp = <3000000>;
 			low-threshold-uamp = <1000000>;
@@ -4883,7 +4863,7 @@
 		compatible = "qcom,msm-thermal";
 		qcom,sensor-id = <5>;
 		qcom,poll-ms = <250>;
-		qcom,limit-temp = <60>;
+		qcom,limit-temp = <70>;
 		qcom,temp-hysteresis = <10>;
 		qcom,therm-reset-temp = <115>;
 		qcom,freq-step = <2>;

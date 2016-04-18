@@ -291,6 +291,10 @@ static void sdhci_reset(struct sdhci_host *host, u8 mask)
 	if (host->ops->platform_reset_exit)
 		host->ops->platform_reset_exit(host, mask);
 
+	/* clear pending normal/error interrupt status */
+	sdhci_writel(host, sdhci_readl(host, SDHCI_INT_STATUS),
+			SDHCI_INT_STATUS);
+
 	if (host->quirks & SDHCI_QUIRK_RESTORE_IRQS_AFTER_RESET)
 		sdhci_clear_set_irqs(host, SDHCI_INT_ALL_MASK, ier);
 
@@ -1675,6 +1679,7 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	 *     zero: cd-gpio is used, and card is removed
 	 *     one: cd-gpio is used, and card is present
 	 */
+	present = mmc_gpio_get_cd(host->mmc);
 	if (present < 0) {
 		/* If polling, assume that the card is always present. */
 		if (host->quirks & SDHCI_QUIRK_BROKEN_CARD_DETECTION)
@@ -1683,8 +1688,6 @@ static void sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 			present = sdhci_readl(host, SDHCI_PRESENT_STATE) &
 					SDHCI_CARD_PRESENT;
 	}
-
-	present = mmc_gpio_get_cd(host->mmc);
 
 	spin_lock_irqsave(&host->lock, flags);
 
@@ -2800,7 +2803,7 @@ static void sdhci_cmd_irq(struct sdhci_host *host, u32 intmask)
 
 	if (intmask & SDHCI_INT_AUTO_CMD_ERR) {
 		auto_cmd_status = host->auto_cmd_err_sts;
-		pr_err("%s: %s: AUTO CMD err sts 0x%08x\n",
+		pr_err_ratelimited("%s: %s: AUTO CMD err sts 0x%08x\n",
 			mmc_hostname(host->mmc), __func__, auto_cmd_status);
 		if (auto_cmd_status & (SDHCI_AUTO_CMD12_NOT_EXEC |
 				       SDHCI_AUTO_CMD_INDEX_ERR |
@@ -3964,7 +3967,6 @@ int sdhci_add_host(struct sdhci_host *host)
 
 	if (caps[0] & SDHCI_ASYNC_INTR)
 		host->async_int_supp = true;
-	mmc_add_host(mmc);
 
 	if (host->quirks2 & SDHCI_QUIRK2_IGN_DATA_END_BIT_ERROR)
 		sdhci_clear_set_irqs(host, SDHCI_INT_DATA_END_BIT, 0);
@@ -3977,6 +3979,7 @@ int sdhci_add_host(struct sdhci_host *host)
 
 	sdhci_enable_card_detection(host);
 
+	mmc_add_host(mmc);
 	return 0;
 
 #ifdef SDHCI_USE_LEDS_CLASS

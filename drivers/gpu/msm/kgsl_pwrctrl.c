@@ -44,10 +44,6 @@
 #define INIT_UDELAY		200
 #define MAX_UDELAY		2000
 
-#ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
-int graphics_boost = 4;
-#endif
-
 struct clk_pair {
 	const char *name;
 	uint map;
@@ -80,6 +76,8 @@ static struct clk_pair clks[KGSL_MAX_CLKS] = {
 	},
 };
 
+static void kgsl_pwrctrl_clk(struct kgsl_device *device, int state,
+					int requested_state);
 static void kgsl_pwrctrl_axi(struct kgsl_device *device, int state);
 static void kgsl_pwrctrl_pwrrail(struct kgsl_device *device, int state);
 
@@ -182,10 +180,6 @@ void kgsl_pwrctrl_pwrlevel_change(struct kgsl_device *device,
 
 
 	trace_kgsl_pwrlevel(device, pwr->active_pwrlevel, pwrlevel->gpu_freq);
-
-#ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
-        graphics_boost = pwr->active_pwrlevel;
-#endif
 }
 
 EXPORT_SYMBOL(kgsl_pwrctrl_pwrlevel_change);
@@ -461,12 +455,19 @@ static ssize_t kgsl_pwrctrl_gpuclk_show(struct device *dev,
 				    struct device_attribute *attr,
 				    char *buf)
 {
+	unsigned long freq;
 	struct kgsl_device *device = kgsl_device_from_dev(dev);
 	struct kgsl_pwrctrl *pwr;
 	if (device == NULL)
 		return 0;
 	pwr = &device->pwrctrl;
-	return snprintf(buf, PAGE_SIZE, "%ld\n", kgsl_pwrctrl_active_freq(pwr));
+
+	if (device->state == KGSL_STATE_SLUMBER)
+		freq = pwr->pwrlevels[pwr->num_pwrlevels - 1].gpu_freq;
+	else
+		freq = kgsl_pwrctrl_active_freq(pwr);
+
+	return snprintf(buf, PAGE_SIZE, "%lu\n", freq);
 }
 
 static ssize_t kgsl_pwrctrl_idle_timer_store(struct device *dev,
@@ -495,7 +496,7 @@ static ssize_t kgsl_pwrctrl_idle_timer_store(struct device *dev,
 
 	kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 
-	/* Let the timeout be requested in jiffies */
+	/* Let the timeout be requested in ms, but convert to jiffies. */
 	device->pwrctrl.interval_timeout = msecs_to_jiffies(val);
 
 	kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
@@ -510,8 +511,8 @@ static ssize_t kgsl_pwrctrl_idle_timer_show(struct device *dev,
 	struct kgsl_device *device = kgsl_device_from_dev(dev);
 	if (device == NULL)
 		return 0;
-	/* Show the idle_timeout in msec */
-	return snprintf(buf, PAGE_SIZE, "%d\n",
+	/* Show the idle_timeout converted to msec */
+	return snprintf(buf, PAGE_SIZE, "%u\n",
 		jiffies_to_msecs(device->pwrctrl.interval_timeout));
 }
 
@@ -1170,7 +1171,7 @@ int kgsl_pwrctrl_init(struct kgsl_device *device)
 
 	pwr->power_flags = 0;
 
-	pwr->interval_timeout = msecs_to_jiffies(pdata->idle_timeout);
+	pwr->interval_timeout = pdata->idle_timeout;
 	pwr->strtstp_sleepwake = pdata->strtstp_sleepwake;
 
 	pwr->pm_qos_active_latency = pdata->pm_qos_active_latency;
@@ -1465,6 +1466,7 @@ _slumber(struct kgsl_device *device)
 		del_timer_sync(&device->idle_timer);
 		/* make sure power is on to stop the device*/
 		kgsl_pwrctrl_enable(device);
+		kgsl_pwrctrl_irq(device, KGSL_PWRFLAGS_ON);
 		device->ftbl->suspend_context(device);
 		device->ftbl->stop(device);
 		_sleep_accounting(device);
@@ -1740,7 +1742,7 @@ int kgsl_active_count_wait(struct kgsl_device *device, int count)
 		int ret;
 		kgsl_mutex_unlock(&device->mutex, &device->mutex_owner);
 		ret = wait_event_timeout(device->active_cnt_wq,
-			_check_active_count(device, count), msecs_to_jiffies(1000));
+			_check_active_count(device, count), HZ);
 		kgsl_mutex_lock(&device->mutex, &device->mutex_owner);
 		result = ret == 0 ? -ETIMEDOUT : 0;
 	}

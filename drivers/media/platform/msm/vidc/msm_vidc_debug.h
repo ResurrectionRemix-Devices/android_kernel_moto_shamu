@@ -37,7 +37,6 @@ enum vidc_msg_prio {
 
 enum vidc_msg_out {
 	VIDC_OUT_PRINTK = 0,
-	VIDC_OUT_FTRACE,
 };
 
 enum msm_vidc_debugfs_event {
@@ -96,10 +95,6 @@ extern int msm_vidc_dcvs_mode;
 				pr_info(VIDC_DBG_TAG __fmt, \
 						VIDC_MSG_PRIO2STRING(__level), \
 						## arg); \
-			} else if (msm_vidc_debug_out == VIDC_OUT_FTRACE) { \
-				trace_printk(KERN_DEBUG VIDC_DBG_TAG __fmt, \
-						VIDC_MSG_PRIO2STRING(__level), \
-						## arg); \
 			} \
 		} \
 	} while (0)
@@ -149,10 +144,12 @@ static inline void show_stats(struct msm_vidc_inst *i)
 	for (x = 0; x < MAX_PROFILING_POINTS; x++) {
 		if ((i->debug.pdata[x].name[0])  &&
 			(msm_vidc_debug & VIDC_PROF)) {
-			dprintk(VIDC_PROF, "%s averaged %d ms/sample\n",
-				i->debug.pdata[x].name,
-				i->debug.pdata[x].cumulative /
+			if (i->debug.samples) {
+				dprintk(VIDC_PROF, "%s averaged %d ms/sample\n",
+					i->debug.pdata[x].name,
+					i->debug.pdata[x].cumulative /
 					i->debug.samples);
+			}
 			dprintk(VIDC_PROF, "%s Samples: %d\n",
 					i->debug.pdata[x].name,
 					i->debug.samples);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -18,12 +18,19 @@
 #include <linux/mutex.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
-#include <mach/msm_smd.h>
+#include <soc/qcom/smd.h>
 #include <linux/qdsp6v2/apr.h>
 #include "q6core.h"
 #include <mach/ocmem.h>
 
 #define TIMEOUT_MS 1000
+
+/*
+ * AVS bring up in the modem is optimitized for the new
+ * Sub System Restart design and 100 milliseconds timeout
+ * is sufficient to make sure the Q6 will be ready.
+ */
+#define Q6_READY_TIMEOUT_MS 100
 
 struct q6core_str {
 	struct apr_svc *core_handle_q;
@@ -244,7 +251,7 @@ bool q6core_is_adsp_ready(void)
 
 	rc = wait_event_timeout(q6core_lcl.bus_bw_req_wait,
 				(q6core_lcl.bus_bw_resp_received == 1),
-				msecs_to_jiffies(TIMEOUT_MS));
+				msecs_to_jiffies(Q6_READY_TIMEOUT_MS));
 	if (rc > 0 && q6core_lcl.bus_bw_resp_received) {
 		/* ensure to read updated param by callback thread */
 		rmb();

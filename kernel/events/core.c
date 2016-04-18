@@ -1322,10 +1322,10 @@ group_sched_out(struct perf_event *group_event,
 		cpuctx->exclusive = 0;
 }
 
-struct remove_event {
-	struct perf_event *event;
-	bool detach_group;
-};
+	struct remove_event {
+			struct perf_event *event;
+			bool detach_group;
+	};
 
 /*
  * Cross CPU call to remove a performance event
@@ -1343,7 +1343,7 @@ static int __perf_remove_from_context(void *info)
 	raw_spin_lock(&ctx->lock);
 	event_sched_out(event, cpuctx, ctx);
 	if (re->detach_group)
-		perf_group_detach(event);
+			perf_group_detach(event);
 	list_del_event(event, ctx);
 	if (!ctx->nr_events && cpuctx->task_ctx == ctx) {
 		ctx->is_active = 0;
@@ -1355,21 +1355,21 @@ static int __perf_remove_from_context(void *info)
 }
 
 #ifdef CONFIG_SMP
-static void perf_retry_remove(struct remove_event *re)
+static void perf_retry_remove(struct perf_event *event)
 {
 	int up_ret;
 	/*
 	 * CPU was offline. Bring it online so we can
 	 * gracefully exit a perf context.
 	 */
-	up_ret = cpu_up(re->event->cpu);
+	up_ret = cpu_up(event->cpu);
 	if (!up_ret)
 		/* Try the remove call once again. */
-		cpu_function_call(re->event->cpu, __perf_remove_from_context,
-				  re);
+		cpu_function_call(event->cpu, __perf_remove_from_context,
+				  event);
 	else
 		pr_err("Failed to bring up CPU: %d, ret: %d\n",
-		       re->event->cpu, up_ret);
+		       event->cpu, up_ret);
 }
 #else
 static void perf_retry_remove(struct perf_event *event)
@@ -1394,11 +1394,12 @@ static void __ref perf_remove_from_context(struct perf_event *event, bool detach
 {
 	struct perf_event_context *ctx = event->ctx;
 	struct task_struct *task = ctx->task;
-	int ret;
 	struct remove_event re = {
 		.event = event,
 		.detach_group = detach_group,
 	};
+
+	int ret;
 
 	lockdep_assert_held(&ctx->mutex);
 
@@ -1406,11 +1407,10 @@ static void __ref perf_remove_from_context(struct perf_event *event, bool detach
 		/*
 		 * Per cpu events are removed via an smp call
 		 */
-		cpu_function_call(event->cpu, __perf_remove_from_context, event);
-		ret = cpu_function_call(event->cpu, __perf_remove_from_context,
-					&re);
+
+		cpu_function_call(event->cpu, __perf_remove_from_context, &re);
 		if (ret == -ENXIO)
-			perf_retry_remove(&re);
+			perf_retry_remove(event);
 		return;
 	}
 
@@ -1438,7 +1438,7 @@ retry:
 	 * holding the ctx->lock ensures the task won't get scheduled in.
 	 */
 	if (detach_group)
-		perf_group_detach(event);
+			perf_group_detach(event);
 	list_del_event(event, ctx);
 	raw_spin_unlock_irq(&ctx->lock);
 }
@@ -2150,9 +2150,6 @@ static void __perf_event_sync_stat(struct perf_event *event,
 	perf_event_update_userpage(event);
 	perf_event_update_userpage(next_event);
 }
-
-#define list_next_entry(pos, member) \
-	list_entry(pos->member.next, typeof(*pos), member)
 
 static void perf_event_sync_stat(struct perf_event_context *ctx,
 				   struct perf_event_context *next_ctx)
@@ -5491,8 +5488,7 @@ static int perf_swevent_add(struct perf_event *event, int flags)
 
 static void perf_swevent_del(struct perf_event *event, int flags)
 {
-	if(!hlist_unhashed(&event->hlist_entry))
-		hlist_del_rcu(&event->hlist_entry);
+	hlist_del_rcu(&event->hlist_entry);
 }
 
 static void perf_swevent_start(struct perf_event *event, int flags)
@@ -6772,9 +6768,6 @@ SYSCALL_DEFINE5(perf_event_open,
 	err = perf_copy_attr(attr_uptr, &attr);
 	if (err)
 		return err;
-
-	if (attr.constraint_duplicate || attr.__reserved_1)
-		return -EINVAL;
 
 	if (!attr.exclude_kernel) {
 		if (perf_paranoid_kernel() && !capable(CAP_SYS_ADMIN))

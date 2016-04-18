@@ -3,6 +3,8 @@
 
 #include <uapi/linux/sched.h>
 
+#include <linux/sched/prio.h>
+#include <linux/atomic.h>
 
 struct sched_param {
 	int sched_priority;
@@ -63,6 +65,16 @@ struct fs_struct;
 struct perf_event_context;
 struct blk_plug;
 
+/* This structure is used to share information and statistics with other
+ * frameworks. It only shares wake up latency fro the moment but should be
+ * extended with other usefull informations
+ */
+struct sched_pm {
+	atomic_t  wake_latency; /* time to wake up the cpu */
+};
+
+DECLARE_PER_CPU(struct sched_pm, sched_stat);
+
 /*
  * List of flags we want to share for kernel threads,
  * if only because they are not used by them anyway.
@@ -107,7 +119,7 @@ extern unsigned long avg_nr_running(void);
 extern unsigned long avg_cpu_nr_running(unsigned int cpu);
 #endif
 
-extern void sched_update_nr_prod(int cpu, unsigned long nr, bool inc);
+extern void sched_update_nr_prod(int cpu, long delta, bool inc);
 extern void sched_get_nr_running_avg(int *avg, int *iowait_avg);
 
 extern void calc_global_load(unsigned long ticks);
@@ -775,6 +787,50 @@ enum cpu_idle_type {
 #define SCHED_POWER_SCALE	(1L << SCHED_POWER_SHIFT)
 
 /*
+ * Wake-queues are lists of tasks with a pending wakeup, whose
+ * callers have already marked the task as woken internally,
+ * and can thus carry on. A common use case is being able to
+ * do the wakeups once the corresponding user lock as been
+ * released.
+ *
+ * We hold reference to each task in the list across the wakeup,
+ * thus guaranteeing that the memory is still valid by the time
+ * the actual wakeups are performed in wake_up_q().
+ *
+ * One per task suffices, because there's never a need for a task to be
+ * in two wake queues simultaneously; it is forbidden to abandon a task
+ * in a wake queue (a call to wake_up_q() _must_ follow), so if a task is
+ * already in a wake queue, the wakeup will happen soon and the second
+ * waker can just skip it.
+ *
+ * The WAKE_Q macro declares and initializes the list head.
+ * wake_up_q() does NOT reinitialize the list; it's expected to be
+ * called near the end of a function, where the fact that the queue is
+ * not used again will be easy to see by inspection.
+ *
+ * Note that this can cause spurious wakeups. schedule() callers
+ * must ensure the call is done inside a loop, confirming that the
+ * wakeup condition has in fact occurred.
+ */
+struct wake_q_node {
+	struct wake_q_node *next;
+};
+
+struct wake_q_head {
+	struct wake_q_node *first;
+	struct wake_q_node **lastp;
+};
+
+#define WAKE_Q_TAIL ((struct wake_q_node *) 0x01)
+
+#define WAKE_Q(name)					\
+	struct wake_q_head name = { WAKE_Q_TAIL, &name.first }
+
+extern void wake_q_add(struct wake_q_head *head,
+		       struct task_struct *task);
+extern void wake_up_q(struct wake_q_head *head);
+
+/*
  * sched-domains (multiprocessor balancing) declarations:
  */
 #ifdef CONFIG_SMP
@@ -785,6 +841,7 @@ enum cpu_idle_type {
 #define SD_BALANCE_WAKE		0x0010  /* Balance on wakeup */
 #define SD_WAKE_AFFINE		0x0020	/* Wake task to waking CPU */
 #define SD_SHARE_CPUPOWER	0x0080	/* Domain members share cpu power */
+#define SD_SHARE_POWERDOMAIN	0x0100	/* Domain members share power domain */
 #define SD_SHARE_PKG_RESOURCES	0x0200	/* Domain members share cpu pkg resources */
 #define SD_SERIALIZE		0x0400	/* Only a single load balancing instance */
 #define SD_ASYM_PACKING		0x0800  /* Place busy groups earlier in the domain */
@@ -1032,12 +1089,7 @@ struct sched_entity {
 	struct cfs_rq		*my_q;
 #endif
 
-/*
- * Load-tracking only depends on SMP, FAIR_GROUP_SCHED dependency below may be
- * removed when useful for applications beyond shares distribution (e.g.
- * load-balance).
- */
-#if defined(CONFIG_SMP) && defined(CONFIG_FAIR_GROUP_SCHED)
+#ifdef CONFIG_SMP
 	/* Per-entity load-tracking */
 	struct sched_avg	avg;
 #endif
@@ -1075,10 +1127,14 @@ struct task_struct {
 	atomic_t usage;
 	unsigned int flags;	/* per process flags, defined below */
 	unsigned int ptrace;
+	unsigned int yield_count;
 
 #ifdef CONFIG_SMP
 	struct llist_node wake_entry;
 	int on_cpu;
+	struct task_struct *last_wakee;
+	unsigned long wakee_flips;
+	unsigned long wakee_flip_decay_ts;
 #endif
 	int on_rq;
 
@@ -1131,6 +1187,9 @@ struct task_struct {
 #endif
 
 	struct list_head tasks;
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+	struct rb_node adj_node;
+#endif
 #ifdef CONFIG_SMP
 	struct plist_node pushable_tasks;
 #endif
@@ -1282,6 +1341,8 @@ struct task_struct {
 
 	/* Protection of the PI data structures: */
 	raw_spinlock_t pi_lock;
+
+	struct wake_q_node wake_q;
 
 #ifdef CONFIG_RT_MUTEXES
 	/* PI waiters blocked on a rt_mutex held by this task */
@@ -1488,6 +1549,14 @@ static inline struct pid *task_tgid(struct task_struct *task)
 {
 	return task->group_leader->pids[PIDTYPE_PID].pid;
 }
+
+#ifdef CONFIG_ANDROID_LMK_ADJ_RBTREE
+extern void add_2_adj_tree(struct task_struct *task);
+extern void delete_from_adj_tree(struct task_struct *task);
+#else
+static inline void add_2_adj_tree(struct task_struct *task) { }
+static inline void delete_from_adj_tree(struct task_struct *task) { }
+#endif
 
 /*
  * Without tasklist or rcu lock it is not safe to dereference
@@ -2605,10 +2674,8 @@ static inline bool __must_check current_set_polling_and_test(void)
 	/*
 	 * Polling state must be visible before we test NEED_RESCHED,
 	 * paired by resched_task()
-	 *
-	 * XXX: assumes set/clear bit are identical barrier wise.
 	 */
-	smp_mb__after_clear_bit();
+	smp_mb__after_atomic();
 
 	return unlikely(tif_need_resched());
 }
@@ -2626,7 +2693,7 @@ static inline bool __must_check current_clr_polling_and_test(void)
 	 * Polling state must be visible before we test NEED_RESCHED,
 	 * paired by resched_task()
 	 */
-	smp_mb__after_clear_bit();
+	smp_mb__after_atomic();
 
 	return unlikely(tif_need_resched());
 }

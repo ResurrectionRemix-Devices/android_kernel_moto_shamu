@@ -246,8 +246,9 @@ static int soc_compr_free(struct snd_compr_stream *cstream)
 					SND_SOC_DAPM_STREAM_STOP);
 		} else {
 			rtd->pop_wait = 1;
-			schedule_delayed_work(&rtd->delayed_work,
-				msecs_to_jiffies(rtd->pmdown_time));
+			queue_delayed_work(system_power_efficient_wq,
+					   &rtd->delayed_work,
+					   msecs_to_jiffies(rtd->pmdown_time));
 		}
 	} else {
 		/* capture streams can be powered down now */
@@ -540,7 +541,7 @@ static int soc_compr_set_params_fe(struct snd_compr_stream *cstream,
 				goto out;
 		}
 
-		memcpy(&fe->dpcm[fe_substream->stream].hw_params, params,
+		memset(&fe->dpcm[fe_substream->stream].hw_params, 0,
 				sizeof(struct snd_pcm_hw_params));
 
 		fe->dpcm[stream].runtime_update = SND_SOC_DPCM_UPDATE_FE;
@@ -553,7 +554,7 @@ static int soc_compr_set_params_fe(struct snd_compr_stream *cstream,
 		if (ret < 0)
 			goto out;
 	} else {
-		memcpy(&fe->dpcm[fe_substream->stream].hw_params, params,
+		memset(&fe->dpcm[fe_substream->stream].hw_params, 0,
 				sizeof(struct snd_pcm_hw_params));
 
 		fe->dpcm[stream].runtime_update = SND_SOC_DPCM_UPDATE_FE;
@@ -680,14 +681,15 @@ static int soc_compr_pointer(struct snd_compr_stream *cstream,
 {
 	struct snd_soc_pcm_runtime *rtd = cstream->private_data;
 	struct snd_soc_platform *platform = rtd->platform;
+	int ret = 0;
 
 	mutex_lock_nested(&rtd->pcm_mutex, rtd->pcm_subclass);
 
 	if (platform->driver->compr_ops && platform->driver->compr_ops->pointer)
-		 platform->driver->compr_ops->pointer(cstream, tstamp);
+		ret = platform->driver->compr_ops->pointer(cstream, tstamp);
 
 	mutex_unlock(&rtd->pcm_mutex);
-	return 0;
+	return ret;
 }
 
 static int soc_compr_copy(struct snd_compr_stream *cstream,
@@ -705,6 +707,22 @@ static int soc_compr_copy(struct snd_compr_stream *cstream,
 	mutex_unlock(&rtd->pcm_mutex);
 	return ret;
 }
+
+static int sst_compr_set_next_track_param(struct snd_compr_stream *cstream,
+				union snd_codec_options *codec_options)
+{
+	struct snd_soc_pcm_runtime *rtd = cstream->private_data;
+	struct snd_soc_platform *platform = rtd->platform;
+	int ret = 0;
+
+	if (platform->driver->compr_ops &&
+			platform->driver->compr_ops->set_next_track_param)
+		ret = platform->driver->compr_ops->set_next_track_param(cstream,
+								codec_options);
+
+	return ret;
+}
+
 
 static int sst_compr_set_metadata(struct snd_compr_stream *cstream,
 				struct snd_compr_metadata *metadata)
@@ -733,32 +751,34 @@ static int sst_compr_get_metadata(struct snd_compr_stream *cstream,
 }
 /* ASoC Compress operations */
 static struct snd_compr_ops soc_compr_ops = {
-	.open		= soc_compr_open,
-	.free		= soc_compr_free,
-	.set_params	= soc_compr_set_params,
-	.set_metadata   = sst_compr_set_metadata,
-	.get_metadata	= sst_compr_get_metadata,
-	.get_params	= soc_compr_get_params,
-	.trigger	= soc_compr_trigger,
-	.pointer	= soc_compr_pointer,
-	.ack		= soc_compr_ack,
-	.get_caps	= soc_compr_get_caps,
-	.get_codec_caps = soc_compr_get_codec_caps
+	.open			= soc_compr_open,
+	.free			= soc_compr_free,
+	.set_params		= soc_compr_set_params,
+	.set_metadata		= sst_compr_set_metadata,
+	.set_next_track_param	= sst_compr_set_next_track_param,
+	.get_metadata		= sst_compr_get_metadata,
+	.get_params		= soc_compr_get_params,
+	.trigger		= soc_compr_trigger,
+	.pointer		= soc_compr_pointer,
+	.ack			= soc_compr_ack,
+	.get_caps		= soc_compr_get_caps,
+	.get_codec_caps		= soc_compr_get_codec_caps
 };
 
 /* ASoC Dynamic Compress operations */
 static struct snd_compr_ops soc_compr_dyn_ops = {
-	.open		= soc_compr_open_fe,
-	.free		= soc_compr_free_fe,
-	.set_params	= soc_compr_set_params_fe,
-	.get_params	= soc_compr_get_params,
-	.set_metadata   = sst_compr_set_metadata,
-	.get_metadata	= sst_compr_get_metadata,
-	.trigger	= soc_compr_trigger_fe,
-	.pointer	= soc_compr_pointer,
-	.ack		= soc_compr_ack,
-	.get_caps	= soc_compr_get_caps,
-	.get_codec_caps = soc_compr_get_codec_caps
+	.open			= soc_compr_open_fe,
+	.free			= soc_compr_free_fe,
+	.set_params		= soc_compr_set_params_fe,
+	.get_params		= soc_compr_get_params,
+	.set_metadata		= sst_compr_set_metadata,
+	.set_next_track_param	= sst_compr_set_next_track_param,
+	.get_metadata		= sst_compr_get_metadata,
+	.trigger		= soc_compr_trigger_fe,
+	.pointer		= soc_compr_pointer,
+	.ack			= soc_compr_ack,
+	.get_caps		= soc_compr_get_caps,
+	.get_codec_caps		= soc_compr_get_codec_caps
 };
 
 /* create a new compress */

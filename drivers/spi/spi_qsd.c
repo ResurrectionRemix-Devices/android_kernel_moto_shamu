@@ -549,7 +549,7 @@ static void msm_spi_read_word_from_fifo(struct msm_spi *dd)
 			   2 bytes: 0x00001234
 			   1 byte : 0x00000012
 			*/
-			shift = 8 * (dd->bytes_per_word - i - 1);
+			shift = BITS_PER_BYTE * i;
 			*dd->read_buf++ = (data_in & (0xFF << shift)) >> shift;
 			dd->rx_bytes_remaining--;
 		}
@@ -1123,7 +1123,7 @@ static void msm_spi_write_word_to_fifo(struct msm_spi *dd)
 			     dd->tx_bytes_remaining; i++) {
 			dd->tx_bytes_remaining--;
 			byte = *dd->write_buf++;
-			word |= (byte << (BITS_PER_BYTE * (3 - i)));
+			word |= (byte << (BITS_PER_BYTE * i));
 		}
 	} else
 		if (dd->tx_bytes_remaining > dd->bytes_per_word)
@@ -1393,8 +1393,10 @@ static void msm_spi_set_qup_io_modes(struct msm_spi *dd)
 	/* Turn on packing for data mover */
 	if (dd->mode == SPI_BAM_MODE)
 		spi_iom |= SPI_IO_M_PACK_EN | SPI_IO_M_UNPACK_EN;
-	else
+	else {
 		spi_iom &= ~(SPI_IO_M_PACK_EN | SPI_IO_M_UNPACK_EN);
+		spi_iom |= SPI_IO_M_OUTPUT_BIT_SHIFT_EN;
+	}
 
 	/*if (dd->mode == SPI_BAM_MODE) {
 		spi_iom |= SPI_IO_C_NO_TRI_STATE;
@@ -1489,20 +1491,6 @@ static void msm_spi_process_transfer(struct msm_spi *dd)
 	read_count = DIV_ROUND_UP(dd->cur_msg_len, dd->bytes_per_word);
 	if (dd->cur_msg->spi->mode & SPI_LOOP)
 		int_loopback = 1;
-	if (int_loopback && dd->multi_xfr &&
-			(read_count > dd->input_fifo_size)) {
-		if (dd->read_len && dd->write_len)
-			pr_err(
-			"%s:Internal Loopback does not support > fifo size"
-			"for write-then-read transactions\n",
-			__func__);
-		else if (dd->write_len && !dd->read_len)
-			pr_err(
-			"%s:Internal Loopback does not support > fifo size"
-			"for write-then-write transactions\n",
-			__func__);
-		return;
-	}
 
 	if (msm_spi_set_state(dd, SPI_OP_STATE_RESET))
 		dev_err(dd->dev,
@@ -1729,9 +1717,9 @@ static void msm_spi_process_message(struct msm_spi *dd)
 	}
 	if (dd->qup_ver)
 		write_force_cs(dd, 0);
+	return;
 error:
 	msm_spi_free_cs_gpio(dd);
-	return;
 }
 
 /**
@@ -2426,7 +2414,6 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	for (i = 0; i < ARRAY_SIZE(spi_cs_rsrcs); ++i)
 		dd->cs_gpios[i].valid = 0;
 
-	master->rt = pdata->rt_priority;
 	dd->pdata = pdata;
 	resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!resource) {
@@ -2437,7 +2424,7 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	dd->mem_phys_addr = resource->start;
 	dd->mem_size = resource_size(resource);
 
-	if (dd->pdata->use_pinctrl) {
+	if (dd->pdata && dd->pdata->use_pinctrl) {
 		dd->dev = &pdev->dev;
 		rc = msm_spi_pinctrl_init(dd);
 		if (rc)
@@ -2445,6 +2432,7 @@ static int __init msm_spi_probe(struct platform_device *pdev)
 	}
 
 	if (pdata) {
+		master->rt = pdata->rt_priority;
 		if (pdata->dma_config) {
 			rc = pdata->dma_config();
 			if (rc) {

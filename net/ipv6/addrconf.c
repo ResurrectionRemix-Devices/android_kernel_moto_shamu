@@ -4712,8 +4712,8 @@ static void __ipv6_ifa_notify(int event, struct inet6_ifaddr *ifp)
 		addrconf_leave_solict(ifp->idev, &ifp->addr);
 		dst_hold(&ifp->rt->dst);
 
-		if (ip6_del_rt(ifp->rt))
-			dst_free(&ifp->rt->dst);
+		ip6_del_rt(ifp->rt);
+
 		break;
 	}
 	atomic_inc(&net->ipv6.dev_addr_genid);
@@ -4753,6 +4753,21 @@ int addrconf_sysctl_forward(ctl_table *ctl, int write,
 	if (ret)
 		*ppos = pos;
 	return ret;
+}
+
+static
+int addrconf_sysctl_mtu(struct ctl_table *ctl, int write,
+			void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	struct inet6_dev *idev = ctl->extra1;
+	int min_mtu = IPV6_MIN_MTU;
+	struct ctl_table lctl;
+
+	lctl = *ctl;
+	lctl.extra1 = &min_mtu;
+	lctl.extra2 = idev ? &idev->dev->mtu : NULL;
+
+	return proc_dointvec_minmax(&lctl, write, buffer, lenp, ppos);
 }
 
 static void dev_disable_change(struct inet6_dev *idev)
@@ -4863,7 +4878,7 @@ static struct addrconf_sysctl_table
 			.data		= &ipv6_devconf.mtu6,
 			.maxlen		= sizeof(int),
 			.mode		= 0644,
-			.proc_handler	= proc_dointvec,
+			.proc_handler	= addrconf_sysctl_mtu,
 		},
 		{
 			.procname	= "accept_ra",

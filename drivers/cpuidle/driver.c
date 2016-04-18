@@ -182,12 +182,20 @@ static void __cpuidle_driver_init(struct cpuidle_driver *drv)
 static int poll_idle(struct cpuidle_device *dev,
 		struct cpuidle_driver *drv, int index)
 {
+	ktime_t	t1, t2;
+	s64 diff;
+
+	t1 = ktime_get();
 	local_irq_enable();
-	if (!current_set_polling_and_test()) {
-		while (!need_resched())
-			cpu_relax();
-	}
-	current_clr_polling();
+	while (!need_resched())
+		cpu_relax();
+
+	t2 = ktime_get();
+	diff = ktime_to_us(ktime_sub(t2, t1));
+	if (diff > INT_MAX)
+		diff = INT_MAX;
+
+	dev->last_residency = (int) diff;
 
 	return index;
 }
@@ -201,7 +209,7 @@ static void poll_idle_init(struct cpuidle_driver *drv)
 	state->exit_latency = 0;
 	state->target_residency = 0;
 	state->power_usage = -1;
-	state->flags = CPUIDLE_FLAG_TIME_VALID;
+	state->flags = 0;
 	state->enter = poll_idle;
 	state->disabled = false;
 }

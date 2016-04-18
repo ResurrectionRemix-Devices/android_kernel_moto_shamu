@@ -148,6 +148,9 @@ static int ext4_inode_is_fast_symlink(struct inode *inode)
 	int ea_blocks = EXT4_I(inode)->i_file_acl ?
 		(inode->i_sb->s_blocksize >> 9) : 0;
 
+	if (ext4_has_inline_data(inode))
+		return 0;
+
 	return (S_ISLNK(inode->i_mode) && inode->i_blocks - ea_blocks == 0);
 }
 
@@ -1032,7 +1035,8 @@ retry_journal:
 		ext4_journal_stop(handle);
 		goto retry_grab;
 	}
-	wait_on_page_writeback(page);
+	/* In case writeback began while the page was unlocked */
+	wait_for_stable_page(page);
 
 	if (ext4_should_dioread_nolock(inode))
 		ret = __block_write_begin(page, pos, len, ext4_get_block_write);
@@ -2753,7 +2757,7 @@ retry_journal:
 		goto retry_grab;
 	}
 	/* In case writeback began while the page was unlocked */
-	wait_on_page_writeback(page);
+	wait_for_stable_page(page);
 
 	ret = __block_write_begin(page, pos, len, ext4_da_get_block_prep);
 	if (ret < 0) {

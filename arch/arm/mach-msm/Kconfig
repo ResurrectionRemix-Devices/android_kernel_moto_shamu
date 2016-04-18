@@ -348,17 +348,6 @@ config  MSM_KRAIT_WFE_FIXUP
 config  ARCH_MSM_CORTEX_A5
 	bool
 
-config MSM_RPM_SMD
-	depends on MSM_SMD
-	select MSM_MPM_OF
-	bool "RPM driver using SMD protocol"
-	help
-	  RPM is the dedicated hardware engine for managing shared SoC
-	  resources. This config adds driver support for using SMD as a
-	  transport layer communication with RPM hardware. It also selects
-	  the MSM_MPM config that programs the MPM module to monitor interrupts
-	  during sleep modes.
-
 config MSM_MPM_OF
 	bool "Modem Power Manager"
 	depends on OF
@@ -660,16 +649,6 @@ config MSM_SERIAL_DEBUGGER_CONSOLE
 	  Enables a console so that printk messages are displayed on
 	  the debugger serial port as the occur.
 
-config MSM_SMD
-	depends on MSM_SMEM
-	bool "MSM Shared Memory Driver (SMD)"
-	help
-	  Support for the shared memory interface between the apps
-	  processor and the baseband processor.  Provides access to
-	  the "shared heap", as well as virtual serial channels
-	  used to communicate with various services on the baseband
-	  processor.
-
 config MSM_PCIE
 	bool "MSM PCIe Controller driver"
 	depends on PCI && PCI_MSI
@@ -677,14 +656,6 @@ config MSM_PCIE
 	help
 	  Enables the PCIe functionality by configures PCIe core on
 	  MSM chipset and by enabling the ARM PCI framework extension.
-
-config MSM_SMD_DEBUG
-	depends on MSM_SMD
-	default y
-	bool "MSM SMD debug support"
-	help
-	  Support for debugging the SMD for communication
-	  between the ARM9 and ARM11
 
 config MSM_SMP2P
 	bool "SMSM Point-to-Point (SMP2P)"
@@ -836,6 +807,13 @@ config MSM_MEMORY_LOW_POWER_MODE
 	help
 	  The application processor controls whether memory should enter
 	  which low power mode.
+
+config FORCE_FAST_CHARGE
+	bool "Force faster charge rate for AC/USB"
+	default y
+	help
+	  This allows users to override default charge rate for both USB and AC
+	  charger input current
 
 choice
 	prompt "Default Memory Low Power Mode during Idle"
@@ -1336,6 +1314,13 @@ config MSM_L2_ERP_2BIT_PANIC
 	  For production builds, it may be acceptable to say 'N' here, since
 	  an uncorrectable error might not necessarily cause further problems.
 
+config BLU_PLUG
+	bool "Dynamic hotplug driver"
+	depends on HOTPLUG_CPU
+	default n
+	help
+	  The Dynamic hotplug driver automatically online/offline CPUs proportional to system load.
+
 config MSM_CPR
 	tristate "Use MSM CPR in S/W mode"
 	help
@@ -1462,6 +1447,13 @@ config HAS_MACH_MEMUTILS
 	help
 	Faster memcpy performance for Krait
 
+config MSM_HOTPLUG
+	bool "MSM hotplug driver"
+	depends on HOTPLUG_CPU
+	default y
+	help
+	  The MSM hotplug driver controls on-/offlining of additional cores based
+	  on current cpu load.
 
 config INTELLI_HOTPLUG
 	bool "Intelli hotplug driver"
@@ -1471,14 +1463,6 @@ config INTELLI_HOTPLUG
 	  An intelligent cpu hotplug driver for
 	  Low Latency Frequency Transition capable processors.
 
-config MSM_HOTPLUG
-	bool "MSM hotplug driver"
-	depends on HOTPLUG_CPU
-	default y
-	help
-	  The MSM hotplug driver controls on-/offlining of additional cores based
-	  on current cpu load.
-
 config BRICKED_HOTPLUG
 	bool "Enable kernel based mpdecision"
 	depends on MSM_RUN_QUEUE_STATS
@@ -1486,5 +1470,5 @@ config BRICKED_HOTPLUG
 	help
 	  This enables kernel based multi core control.
 	  (up/down hotplug based on load)
-
+	  
 endif

@@ -55,6 +55,14 @@ struct fiops_data {
 	unsigned int async_scale;
 };
 
+static inline int task_ioprio(struct io_context *ioc)
+{
+	if (ioprio_valid(ioc->ioprio))
+		return IOPRIO_PRIO_DATA(ioc->ioprio);
+
+	return IOPRIO_NORM;
+}
+
 struct fiops_ioc {
 	struct io_cq icq;
 
@@ -467,11 +475,11 @@ static void fiops_init_prio_data(struct fiops_ioc *cic)
 		cic->wl_type = fiops_wl_type(task_nice_ioclass(tsk));
 		break;
 	case IOPRIO_CLASS_RT:
-		cic->ioprio = IOPRIO_PRIO_DATA(ioc->ioprio);
+		cic->ioprio = task_ioprio(ioc);
 		cic->wl_type = fiops_wl_type(IOPRIO_CLASS_RT);
 		break;
 	case IOPRIO_CLASS_BE:
-		cic->ioprio = IOPRIO_PRIO_DATA(ioc->ioprio);
+		cic->ioprio = task_ioprio(ioc);
 		cic->wl_type = fiops_wl_type(IOPRIO_CLASS_BE);
 		break;
 	case IOPRIO_CLASS_IDLE:
@@ -621,15 +629,16 @@ static int fiops_init_queue(struct request_queue *q, struct elevator_type *e)
 	struct elevator_queue *eq;
 
 	eq = elevator_alloc(q, e);
-	if (!eq)
+	if (eq == NULL)
 		return -ENOMEM;
 
 	fiopsd = kzalloc_node(sizeof(*fiopsd), GFP_KERNEL, q->node);
-	if (!fiopsd) {
+	if (fiopsd == NULL) {
 		kobject_put(&eq->kobj);
 		return -ENOMEM;
 	}
 	eq->elevator_data = fiopsd;
+
 
 	fiopsd->queue = q;
 	spin_lock_irq(q->queue_lock);

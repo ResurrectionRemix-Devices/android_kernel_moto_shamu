@@ -360,6 +360,9 @@ typedef struct dhd_pub {
 	int   hang_was_sent;
 	int   rxcnt_timeout;		/* counter rxcnt timeout to send HANG */
 	int   txcnt_timeout;		/* counter txcnt timeout to send HANG */
+#ifdef BCMPCIE
+	int   d3ackcnt_timeout;
+#endif
 	bool hang_report;		/* enable hang report by default */
 #ifdef WLMEDIA_HTSF
 	uint8 htsfdlystat_sz; /* Size of delay stats, max 255B */
@@ -572,7 +575,7 @@ inline static void MUTEX_UNLOCK_SOFTAP_SET(dhd_pub_t * dhdp)
 
 #define DHD_OS_WD_WAKE_LOCK(pub)		dhd_os_wd_wake_lock(pub)
 #define DHD_OS_WD_WAKE_UNLOCK(pub)		dhd_os_wd_wake_unlock(pub)
-#define DHD_PACKET_TIMEOUT_MS	500
+#define DHD_PACKET_TIMEOUT_MS	150
 #define DHD_EVENT_TIMEOUT_MS	1500
 
 
@@ -827,6 +830,8 @@ extern int dhd_do_driver_init(struct net_device *net);
 extern int dhd_event_ifadd(struct dhd_info *dhd, struct wl_event_data_if *ifevent,
 	char *name, uint8 *mac);
 extern int dhd_event_ifdel(struct dhd_info *dhd, struct wl_event_data_if *ifevent,
+	char *name, uint8 *mac);
+extern int dhd_event_ifchange(struct dhd_info *dhd, struct wl_event_data_if *ifevent,
 	char *name, uint8 *mac);
 extern struct net_device* dhd_allocate_if(dhd_pub_t *dhdpub, int ifidx, char *name,
 	uint8 *mac, uint8 bssidx, bool need_rtnl_lock);

@@ -246,8 +246,6 @@ void tcp_select_initial_window(int __space, __u32 mss,
 		else
 			*rcv_wnd = min(*rcv_wnd, init_cwnd * mss);
 	}
-	
-	*rcv_wnd = 64240;
 
 	/* Set the clamp no higher than max representable value */
 	(*window_clamp) = min(65535U << (*rcv_wscale), *window_clamp);
@@ -1891,10 +1889,8 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 			/* It is possible TX completion already happened
 			 * before we set TSQ_THROTTLED, so we must
 			 * test again the condition.
-			 * We abuse smp_mb__after_clear_bit() because
-			 * there is no smp_mb__after_set_bit() yet
 			 */
-			smp_mb__after_clear_bit();
+			smp_mb__after_atomic();
 			if (atomic_read(&sk->sk_wmem_alloc) > limit)
 				break;
 		}

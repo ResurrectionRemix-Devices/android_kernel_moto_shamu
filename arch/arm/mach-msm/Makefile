@@ -19,7 +19,6 @@ obj-$(CONFIG_CPU_V7) += idle-v7.o
 obj-$(CONFIG_MSM_JTAG) += jtag-fuse.o jtag.o
 obj-$(CONFIG_MSM_JTAG_MM) +=  jtag-fuse.o jtag-mm.o
 
-obj-$(CONFIG_MSM_SMD) += smd.o smd_debug.o smd_private.o smd_init_dt.o smsm_debug.o
 obj-$(CONFIG_MSM_SMP2P) += smp2p.o smp2p_debug.o smp2p_gpio.o
 obj-$(CONFIG_MSM_SMP2P_TEST) += smp2p_loopback.o smp2p_test.o smp2p_gpio_test.o smp2p_spinlock_test.o
 obj-$(CONFIG_MSM_SCM) += scm-boot.o
@@ -84,10 +83,6 @@ obj-$(CONFIG_MSM_PM) += msm-pm.o pm-data.o lpm_levels.o
 CFLAGS_msm_vibrator.o += -Idrivers/staging/android
 
 obj-$(CONFIG_MSM_LPM_TEST) += test-lpm.o
-obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd.o
-ifdef CONFIG_DEBUG_FS
-obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd-debug.o
-endif
 obj-$(CONFIG_MSM_MPM_OF) += mpm-of.o
 obj-$(CONFIG_MSM_RPM_STATS_LOG) += rpm_stats.o rpm_master_stat.o
 obj-$(CONFIG_MSM_RPM_RBCPR_STATS_V2_LOG) += rpm_rbcpr_stats_v2.o
@@ -110,6 +105,7 @@ obj-$(CONFIG_ARCH_MSM8610) += gpiomux-v2.o gpiomux.o
 obj-$(CONFIG_ARCH_APQ8084) += gpiomux-v2.o gpiomux.o
 obj-$(CONFIG_ARCH_FSM9900) += gpiomux-v2.o gpiomux.o
 
+obj-$(CONFIG_BLU_PLUG) += blu_plug.o
 obj-$(CONFIG_MSM_RUN_QUEUE_STATS) += msm_rq_stats.o
 obj-$(CONFIG_MSM_NATIVE_RESTART) += restart.o
 
@@ -119,7 +115,6 @@ obj-$(CONFIG_MSM_CACHE_DUMP) += msm_cache_dump.o
 obj-$(CONFIG_MSM_HSIC_SYSMON) += hsic_sysmon.o
 obj-$(CONFIG_MSM_HSIC_SYSMON_TEST) += hsic_sysmon_test.o
 
-obj-$(CONFIG_MSM_RPM_SMD) += rpm-smd.o
 obj-$(CONFIG_MSM_RPC_USB) += rpc_hsusb.o rpc_fsusb.o
 
 obj-$(CONFIG_MSM_ENABLE_WDOG_DEBUG_CONTROL) += wdog_debug.o
@@ -133,11 +128,11 @@ obj-$(CONFIG_MSM_CPR_REGULATOR) += cpr-regulator.o
 obj-$(CONFIG_MSM_DEVFREQ_CPUBW) += devfreq_cpubw.o
 
 obj-$(CONFIG_HAS_MACH_MEMUTILS) += memutils/
-obj-$(CONFIG_ARCH_RANDOM) += early_random.o
 obj-$(CONFIG_PERFMAP) += perfmap.o
 obj-$(CONFIG_MMI_UNIT_INFO) += mmi-unit-info.o
 obj-$(CONFIG_MMI_SOC_INFO) += mmi_soc_info.o
 
-obj-$(CONFIG_INTELLI_HOTPLUG) += intelli_hotplug.o
+obj-$(CONFIG_FORCE_FAST_CHARGE) += fastchg.o
 obj-$(CONFIG_MSM_HOTPLUG) += msm_hotplug.o
+obj-$(CONFIG_INTELLI_HOTPLUG) += intelli_hotplug.o
 obj-$(CONFIG_BRICKED_HOTPLUG) += bricked_hotplug.o

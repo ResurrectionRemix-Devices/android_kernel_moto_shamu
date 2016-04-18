@@ -375,8 +375,6 @@ int dwc3_send_gadget_generic_command(struct dwc3 *dwc, int cmd, u32 param)
 		if (!(reg & DWC3_DGCMD_CMDACT)) {
 			dev_vdbg(dwc->dev, "Command Complete --> %d\n",
 					DWC3_DGCMD_STATUS(reg));
-			if (DWC3_DGCMD_STATUS(reg))
-				return -EINVAL;
 			ret = 0;
 			break;
 		}
@@ -432,8 +430,6 @@ int dwc3_send_gadget_ep_cmd(struct dwc3 *dwc, unsigned ep,
 		if (!(reg & DWC3_DEPCMD_CMDACT)) {
 			dev_vdbg(dwc->dev, "Command Complete --> %d\n",
 					DWC3_DEPCMD_STATUS(reg));
-			if (DWC3_DEPCMD_STATUS(reg))
-				return -EINVAL;
 			/* SW issues START TRANSFER command to isochronous ep
 			 * with future frame interval. If future interval time
 			 * has already passed when core recieves command, core
@@ -1468,13 +1464,13 @@ int __dwc3_gadget_ep_set_halt(struct dwc3_ep *dep, int value, int protocol)
 	memset(&params, 0x00, sizeof(params));
 
 	if (value) {
-		if (!protocol && ((dep->direction && dep->flags & DWC3_EP_BUSY) ||
-				(!list_empty(&dep->req_queued) ||
-				 !list_empty(&dep->request_list)))) {
-			dev_dbg(dwc->dev, "%s: pending request, cannot halt\n",
-					dep->name);
-			return -EAGAIN;
-		}
+			if (!protocol && ((dep->direction && dep->flags & DWC3_EP_BUSY) ||
+							(!list_empty(&dep->req_queued) ||
+							 !list_empty(&dep->request_list)))) {
+					dev_dbg(dwc->dev, "%s: pending request, cannot halt\n",
+									dep->name);
+					return -EAGAIN;
+	}
 
 		ret = dwc3_send_gadget_ep_cmd(dwc, dep->number,
 			DWC3_DEPCMD_SETSTALL, &params);
@@ -3082,8 +3078,6 @@ static irqreturn_t dwc3_thread_interrupt(int irq, void *_dwc)
 	unsigned long flags;
 	irqreturn_t ret = IRQ_NONE;
 	int i;
-
-	dbg_event(0xFF, "IRQ Thread", 0);
 
 	spin_lock_irqsave(&dwc->lock, flags);
 

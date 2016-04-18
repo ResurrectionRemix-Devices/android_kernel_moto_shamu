@@ -714,23 +714,11 @@ int output_buffer_cache_invalidate(struct msm_vidc_inst *inst,
 	return 0;
 }
 
-static bool valid_v4l2_buffer(struct v4l2_buffer *b,
-		struct msm_vidc_inst *inst) {
-	enum vidc_ports port =
-		!V4L2_TYPE_IS_MULTIPLANAR(b->type) ? MAX_PORT_NUM :
-		b->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ? CAPTURE_PORT :
-		b->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE ? OUTPUT_PORT :
-								MAX_PORT_NUM;
-
-	return port != MAX_PORT_NUM &&
-		inst->fmts[port]->num_planes == b->length;
-}
-
 int msm_vidc_prepare_buf(void *instance, struct v4l2_buffer *b)
 {
 	struct msm_vidc_inst *inst = instance;
 
-	if (!inst || !b || !valid_v4l2_buffer(b, inst))
+	if (!inst || !b)
 		return -EINVAL;
 
 	if (is_dynamic_output_buffer_mode(b, inst)) {
@@ -884,8 +872,14 @@ int msm_vidc_qbuf(void *instance, struct v4l2_buffer *b)
 	int rc = 0;
 	int i;
 
-	if (!inst || !b || !valid_v4l2_buffer(b, inst))
+	if (!inst || !b)
 		return -EINVAL;
+
+	if (b->length > VIDEO_MAX_PLANES) {
+		dprintk(VIDC_ERR, "num planes exceeds max: %d\n",
+			b->length);
+		return -EINVAL;
+	}
 
 	if (is_dynamic_output_buffer_mode(b, inst)) {
 		if (b->m.planes[0].reserved[0])
@@ -961,8 +955,14 @@ int msm_vidc_dqbuf(void *instance, struct v4l2_buffer *b)
 	struct buffer_info *buffer_info = NULL;
 	int i = 0, rc = 0;
 
-	if (!inst || !b || !valid_v4l2_buffer(b, inst))
+	if (!inst || !b)
 		return -EINVAL;
+
+	if (b->length > VIDEO_MAX_PLANES) {
+		dprintk(VIDC_ERR, "num planes exceed maximum: %d\n",
+			b->length);
+		return -EINVAL;
+	}
 
 	if (inst->session_type == MSM_VIDC_DECODER)
 		rc = msm_vdec_dqbuf(instance, b);
@@ -1011,6 +1011,11 @@ int msm_vidc_dqbuf(void *instance, struct v4l2_buffer *b)
 		mutex_lock(&inst->lock);
 		buffer_info->dequeued = true;
 		mutex_unlock(&inst->lock);
+		if (!buffer_info)
+			return -EINVAL;
+
+		buffer_info->dequeued = true;
+
 		dprintk(VIDC_DBG, "[DEQUEUED]: fd[0] = %d\n",
 			buffer_info->fd[0]);
 		rc = unmap_and_deregister_buf(inst, buffer_info);
@@ -1124,8 +1129,8 @@ void *msm_vidc_smem_get_client(void *instance)
 	struct msm_vidc_inst *inst = instance;
 
 	if (!inst || !inst->mem_client) {
-		dprintk(VIDC_ERR, "%s: invalid instance or client = %p %p\n",
-				__func__, inst, inst->mem_client);
+		dprintk(VIDC_ERR, "%s: invalid instance or client = %p\n",
+				__func__, inst);
 		return NULL;
 	}
 
@@ -1367,6 +1372,12 @@ static void cleanup_instance(struct msm_vidc_inst *inst)
 				kfree(buf);
 				mutex_lock(&inst->lock);
 			}
+			mutex_unlock(&inst->lock);
+			if (msm_comm_release_scratch_buffers(inst, false))
+				dprintk(VIDC_ERR,
+					"Failed to release scratch buffers\n");
+
+			mutex_lock(&inst->lock);
 		}
 		if (!list_empty(&inst->persistbufs)) {
 			list_for_each_safe(ptr, next, &inst->persistbufs) {
@@ -1412,7 +1423,7 @@ int msm_vidc_close(void *instance)
 	int rc = 0;
 	int i;
 
-	if (!inst)
+	if (!inst || !inst->core)
 		return -EINVAL;
 
 	v4l2_fh_del(&inst->event_handler);
@@ -1430,6 +1441,7 @@ int msm_vidc_close(void *instance)
 	}
 
 	core = inst->core;
+
 	mutex_lock(&core->lock);
 	list_for_each_safe(ptr, next, &core->instances) {
 		temp = list_entry(ptr, struct msm_vidc_inst, list);
@@ -1455,6 +1467,8 @@ int msm_vidc_close(void *instance)
 	if (rc)
 		dprintk(VIDC_ERR,
 			"Failed to move video instance to uninit state\n");
+
+	msm_comm_session_clean(inst);
 
 	pr_info(VIDC_DBG_TAG "Closed video instance: %p\n",
 			VIDC_MSG_PRIO2STRING(VIDC_INFO), inst);

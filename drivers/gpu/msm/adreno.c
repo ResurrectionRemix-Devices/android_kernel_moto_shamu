@@ -244,6 +244,10 @@ static const struct input_device_id adreno_input_ids[] = {
 	{
 		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
 		.evbit = { BIT_MASK(EV_ABS) },
+		/* assumption: MT_.._X & MT_.._Y are in the same long */
+		.absbit = { [BIT_WORD(ABS_MT_POSITION_X)] =
+				BIT_MASK(ABS_MT_POSITION_X) |
+				BIT_MASK(ABS_MT_POSITION_Y) },
 	},
 	{ },
 };
@@ -1556,7 +1560,7 @@ static int adreno_of_get_pdata(struct platform_device *pdev)
 
 	if (of_property_read_u32(pdev->dev.of_node, "qcom,idle-timeout",
 		&pdata->idle_timeout))
-		pdata->idle_timeout = 80;
+		pdata->idle_timeout = HZ/12;
 
 	pdata->strtstp_sleepwake = of_property_read_bool(pdev->dev.of_node,
 						"qcom,strtstp-sleepwake");
@@ -2322,7 +2326,6 @@ static ssize_t _ft_hang_intr_status_store(struct device *dev,
 	old_setting =
 		(test_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv) ? 1 : 0);
 	if (new_setting != old_setting) {
-		int clk_on = 0;
 		if (new_setting)
 			set_bit(ADRENO_DEVICE_HANG_INTR, &adreno_dev->priv);
 		else
@@ -2331,15 +2334,9 @@ static ssize_t _ft_hang_intr_status_store(struct device *dev,
 		switch (device->state) {
 		case KGSL_STATE_NAP:
 		case KGSL_STATE_SLEEP:
-			kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_ON,
-					device->state);
-			clk_on = 1;
+			kgsl_pwrctrl_wake(device, 0);
 		case KGSL_STATE_ACTIVE:
 			adreno_dev->gpudev->irq_control(adreno_dev, 1);
-			/* switch off clocks if we turned it on */
-			if (clk_on)
-				kgsl_pwrctrl_clk(device, KGSL_PWRFLAGS_OFF,
-					device->state);
 		/*
 		 * For following states setting will be picked up on device
 		 * start. Still need them in switch statement to differentiate
@@ -2831,7 +2828,7 @@ int adreno_spin_idle(struct kgsl_device *device)
 		adreno_getreg(adreno_dev, ADRENO_REG_RBBM_STATUS) << 2,
 		0x00000000, 0x80000000);
 
-	while (time_before(jiffies, wait)) {
+	do {
 		/*
 		 * If we fault, stop waiting and return an error. The dispatcher
 		 * will clean up the fault from the work queue, but we need to
@@ -2844,7 +2841,19 @@ int adreno_spin_idle(struct kgsl_device *device)
 
 		if (adreno_isidle(device))
 			return 0;
-	}
+
+	} while (time_before(jiffies, wait));
+
+	/*
+	 * Under rare conditions, preemption can cause the while loop to exit
+	 * without checking if the gpu is idle. check one last time before we
+	 * return failure.
+	 */
+	if (adreno_gpu_fault(adreno_dev) != 0)
+			return -EDEADLK;
+
+	if (adreno_isidle(device))
+			return 0;
 
 	return -ETIMEDOUT;
 }

@@ -1073,13 +1073,13 @@ int disk_expand_part_tbl(struct gendisk *disk, int partno)
 	int i, target;
 	size_t size;
 
-        /*
-        * check for int overflow, since we can get here from blkpg_ioctl()
-        * with a user passed 'partno'.
-        */
-        target = partno + 1;
-        if (target < 0)
-                return -EINVAL;
+	/*
+	 * check for int overflow, since we can get here from blkpg_ioctl()
+	 * with a user passed 'partno'.
+	 */
+	target = partno + 1;
+	if (target < 0)
+		return -EINVAL;
 
 	/* disk_max_parts() is zero during initialization, ignore if so */
 	if (disk_max_parts(disk) && target > disk_max_parts(disk))

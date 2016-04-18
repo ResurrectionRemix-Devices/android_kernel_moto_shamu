@@ -70,7 +70,7 @@ static const unsigned freqs[] = { 400000, 300000, 200000, 100000 };
  * performance cost, and for other reasons may not always be desired.
  * So we allow it it to be disabled.
  */
-bool use_spi_crc = 1;
+bool use_spi_crc = 0;
 module_param(use_spi_crc, bool, 0);
 
 /*
@@ -401,7 +401,9 @@ EXPORT_SYMBOL(mmc_blk_init_bkops_statistics);
  */
 void mmc_start_delayed_bkops(struct mmc_card *card)
 {
-	if (!card || !card->ext_csd.bkops_en || mmc_card_doing_bkops(card))
+	if (!card ||
+		!(mmc_card_get_bkops_en_manual(card)) ||
+		mmc_card_doing_bkops(card))
 		return;
 
 	if (card->bkops_info.sectors_changed <
@@ -438,7 +440,7 @@ void mmc_start_bkops(struct mmc_card *card, bool from_exception)
 	int err;
 
 	BUG_ON(!card);
-	if (!card->ext_csd.bkops_en)
+	if (!(mmc_card_get_bkops_en_manual(card)))
 		return;
 
 	if ((card->bkops_info.cancel_delayed_work) && !from_exception) {
@@ -535,12 +537,13 @@ EXPORT_SYMBOL(mmc_start_bkops);
  */
 static void mmc_wait_data_done(struct mmc_request *mrq)
 {
+
 	unsigned long flags;
 	struct mmc_context_info *context_info = &mrq->host->context_info;
 
 	spin_lock_irqsave(&context_info->lock, flags);
-	context_info->is_done_rcv = true;
-	wake_up_interruptible(&context_info->wait);
+	mrq->host->context_info.is_done_rcv = true;
+	wake_up_interruptible(&mrq->host->context_info.wait);
 	spin_unlock_irqrestore(&context_info->lock, flags);
 }
 
@@ -562,6 +565,7 @@ void mmc_start_idle_time_bkops(struct work_struct *work)
 		return;
 
 	mmc_start_bkops(card, false);
+
 }
 EXPORT_SYMBOL(mmc_start_idle_time_bkops);
 
@@ -622,8 +626,10 @@ static bool mmc_should_stop_curr_req(struct mmc_host *host)
 	    (host->areq->cmd_flags & REQ_FUA))
 		return false;
 
+	mmc_host_clk_hold(host);
 	remainder = (host->ops->get_xfer_remain) ?
 		host->ops->get_xfer_remain(host) : -1;
+	mmc_host_clk_release(host);
 	return (remainder > 0);
 }
 
@@ -648,6 +654,7 @@ static int mmc_stop_request(struct mmc_host *host)
 				mmc_hostname(host));
 		return -ENOTSUPP;
 	}
+	mmc_host_clk_hold(host);
 	err = host->ops->stop_request(host);
 	if (err) {
 		pr_err("%s: Call to host->ops->stop_request() failed (%d)\n",
@@ -682,6 +689,7 @@ static int mmc_stop_request(struct mmc_host *host)
 		goto out;
 	}
 out:
+	mmc_host_clk_release(host);
 	return err;
 }
 
@@ -3013,7 +3021,8 @@ out:
 	return;
 }
 
-static bool mmc_is_vaild_state_for_clk_scaling(struct mmc_host *host)
+static bool mmc_is_vaild_state_for_clk_scaling(struct mmc_host *host,
+				enum mmc_load state)
 {
 	struct mmc_card *card = host->card;
 	u32 status;
@@ -3026,7 +3035,8 @@ static bool mmc_is_vaild_state_for_clk_scaling(struct mmc_host *host)
 	 */
 	if (!card || (mmc_card_mmc(card) &&
 			card->part_curr == EXT_CSD_PART_CONFIG_ACC_RPMB)
-			|| host->clk_scaling.invalid_state)
+			|| (state != MMC_LOAD_LOW &&
+				host->clk_scaling.invalid_state))
 		goto out;
 
 	if (mmc_send_status(card, &status)) {
@@ -3057,7 +3067,7 @@ static int mmc_clk_update_freq(struct mmc_host *host,
 	}
 
 	if (freq != host->clk_scaling.curr_freq) {
-		if (!mmc_is_vaild_state_for_clk_scaling(host)) {
+		if (!mmc_is_vaild_state_for_clk_scaling(host, state)) {
 			err = -EAGAIN;
 			goto error;
 		}
@@ -3596,9 +3606,11 @@ int mmc_flush_cache(struct mmc_card *card)
 			pr_err("%s: cache flush timeout\n",
 					mmc_hostname(card->host));
 			rc = mmc_interrupt_hpi(card);
-			if (rc)
+			if (rc) {
 				pr_err("%s: mmc_interrupt_hpi() failed (%d)\n",
 						mmc_hostname(host), rc);
+				err = -ENODEV;
+			}
 		} else if (err) {
 			pr_err("%s: cache flush error %d\n",
 					mmc_hostname(card->host), err);

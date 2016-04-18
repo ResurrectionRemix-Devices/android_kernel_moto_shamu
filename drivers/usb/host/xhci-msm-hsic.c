@@ -31,6 +31,7 @@
 #include <linux/debugfs.h>
 #include <asm/unaligned.h>
 #include <linux/pinctrl/consumer.h>
+#include <linux/moduleparam.h>
 
 #include "xhci.h"
 
@@ -90,6 +91,10 @@
  */
 #define MSM_HSIC_INT_MODERATION 12000
 
+#define WL_TIMEOUT 2000
+static int wl_divide = 0;
+module_param(wl_divide, int, 0644);
+
 static u64 dma_mask = DMA_BIT_MASK(64);
 
 struct mxhci_hsic_hcd {
@@ -144,8 +149,8 @@ static struct dbg_data dbg_hsic = {
 	.ctrl_lck = __RW_LOCK_UNLOCKED(clck),
 	.data_idx = 0,
 	.data_lck = __RW_LOCK_UNLOCKED(dlck),
-	.log_payload = 1,
-	.log_events = 1,
+	.log_payload = 0,
+	.log_events = 0,
 	.inep_log_mask = 0xffff,
 	.outep_log_mask = 0xffff
 };
@@ -687,7 +692,9 @@ static irqreturn_t mxhci_hsic_wakeup_irq(int irq, void *data)
 	xhci_dbg_log_event(&dbg_hsic, NULL, "Remote Wakeup IRQ",
 			mxhci->wakeup_int_cnt);
 
-	pm_stay_awake(mxhci->dev);
+	if (wl_divide == 1) pm_stay_awake(mxhci->dev);
+	else if (wl_divide > 1) pm_wakeup_event(mxhci->dev, 
+		WL_TIMEOUT/wl_divide);
 
 	spin_lock(&mxhci->wakeup_lock);
 	if (mxhci->wakeup_irq_enabled) {
@@ -940,7 +947,9 @@ static int mxhci_hsic_resume(struct mxhci_hsic_hcd *mxhci)
 		return 0;
 	}
 
-	pm_stay_awake(mxhci->dev);
+	if (wl_divide == 1) pm_stay_awake(mxhci->dev);
+	else if (wl_divide > 1) pm_wakeup_event(mxhci->dev, 
+		WL_TIMEOUT/wl_divide);
 
 	/* enable force-on mode for periph_on */
 	clk_set_flags(mxhci->system_clk, CLKFLAG_RETAIN_PERIPH);
@@ -1526,7 +1535,10 @@ static int mxhci_hsic_probe(struct platform_device *pdev)
 	init_waitqueue_head(&mxhci->phy_in_lpm_wq);
 
 	device_init_wakeup(&pdev->dev, 1);
-	pm_stay_awake(mxhci->dev);
+
+	if (wl_divide == 1) pm_stay_awake(mxhci->dev);
+	else if (wl_divide > 1) pm_wakeup_event(mxhci->dev, 
+		WL_TIMEOUT/wl_divide);
 
 	pm_runtime_set_active(&pdev->dev);
 	pm_runtime_enable(&pdev->dev);

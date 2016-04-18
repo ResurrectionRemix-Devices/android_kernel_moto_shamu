@@ -10,6 +10,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/bitops.h>
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
@@ -520,15 +521,19 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 			card->ext_csd.bkops_en = ext_csd[EXT_CSD_BKOPS_EN];
 			card->ext_csd.raw_bkops_status =
 				ext_csd[EXT_CSD_BKOPS_STATUS];
-			if (!card->ext_csd.bkops_en &&
+			if (!(mmc_card_get_bkops_en_manual(card)) &&
 				card->host->caps2 & MMC_CAP2_INIT_BKOPS) {
-				err = mmc_switch(card, EXT_CSD_CMD_SET_NORMAL,
-					EXT_CSD_BKOPS_EN, 1, 0);
-				if (err)
+				mmc_card_set_bkops_en_manual(card);
+				err = mmc_switch(card,
+					EXT_CSD_CMD_SET_NORMAL,
+					EXT_CSD_BKOPS_EN,
+					card->ext_csd.bkops_en , 0);
+				if (err) {
 					pr_warn("%s: Enabling BKOPS failed\n",
 						mmc_hostname(card->host));
-				else
-					card->ext_csd.bkops_en = 1;
+					mmc_card_clr_bkops_en_manual(card);
+				}
+
 			}
 		}
 
@@ -1424,10 +1429,7 @@ static int mmc_reboot_notify(struct notifier_block *notify_block,
 	struct mmc_card *card = container_of(
 			notify_block, struct mmc_card, reboot_notify);
 
-	if (event != SYS_RESTART)
-		card->issue_long_pon = true;
-	else
-		card->issue_long_pon = false;
+	card->pon_type = (event != SYS_RESTART) ? MMC_LONG_PON : MMC_SHRT_PON;
 
 	return NOTIFY_OK;
 }
@@ -1762,8 +1764,7 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 			if (!card->wr_pack_stats.packing_events)
 				goto free_card;
 		}
-
-		if (card->ext_csd.bkops_en) {
+		if (mmc_card_get_bkops_en_manual(card)) {
 			INIT_DELAYED_WORK(&card->bkops_info.dw,
 					  mmc_start_idle_time_bkops);
 
@@ -1823,19 +1824,24 @@ static int mmc_poweroff_notify(struct mmc_card *card, unsigned int notify_type)
 	return err;
 }
 
-int mmc_send_long_pon(struct mmc_card *card)
+int mmc_send_pon(struct mmc_card *card)
 {
 	int err = 0;
 	struct mmc_host *host = card->host;
 
+	if (!mmc_can_poweroff_notify(card))
+		goto out;
+
 	mmc_claim_host(host);
-	if (card->issue_long_pon && mmc_can_poweroff_notify(card)) {
+	if (card->pon_type & MMC_LONG_PON)
 		err = mmc_poweroff_notify(host->card, EXT_CSD_POWER_OFF_LONG);
-		if (err)
-			pr_warning("%s: error %d sending Long PON",
-					mmc_hostname(host), err);
-	}
+	else if (card->pon_type & MMC_SHRT_PON)
+		err = mmc_poweroff_notify(host->card, EXT_CSD_POWER_OFF_SHORT);
+	if (err)
+		pr_warn("%s: error %d sending PON type %u",
+			mmc_hostname(host), err, card->pon_type);
 	mmc_release_host(host);
+out:
 	return err;
 }
 

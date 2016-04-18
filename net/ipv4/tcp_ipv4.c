@@ -707,8 +707,7 @@ static void tcp_v4_send_reset(struct sock *sk, struct sk_buff *skb)
 
 	net = dev_net(skb_dst(skb)->dev);
 	arg.tos = ip_hdr(skb)->tos;
-	ip_send_unicast_reply(*this_cpu_ptr(net->ipv4.tcp_sk),
-			      skb, ip_hdr(skb)->saddr,
+	ip_send_unicast_reply(net, skb, ip_hdr(skb)->saddr,
 			      ip_hdr(skb)->daddr, &arg, arg.iov[0].iov_len);
 
 	TCP_INC_STATS_BH(net, TCP_MIB_OUTSEGS);
@@ -791,8 +790,7 @@ static void tcp_v4_send_ack(struct sk_buff *skb, u32 seq, u32 ack,
 	if (oif)
 		arg.bound_dev_if = oif;
 	arg.tos = tos;
-	ip_send_unicast_reply(*this_cpu_ptr(net->ipv4.tcp_sk),
-			      skb, ip_hdr(skb)->saddr,
+	ip_send_unicast_reply(net, skb, ip_hdr(skb)->saddr,
 			      ip_hdr(skb)->daddr, &arg, arg.iov[0].iov_len);
 
 	TCP_INC_STATS_BH(net, TCP_MIB_OUTSEGS);
@@ -1932,7 +1930,7 @@ bool tcp_prequeue(struct sock *sk, struct sk_buff *skb)
 	    skb_queue_len(&tp->ucopy.prequeue) == 0)
 		return false;
 
-	skb_dst_force(skb);
+	skb_dst_force_safe(skb);
 	__skb_queue_tail(&tp->ucopy.prequeue, skb);
 	tp->ucopy.memory += skb->truesize;
 	if (tp->ucopy.memory > sk->sk_rcvbuf) {
@@ -2124,9 +2122,10 @@ void inet_sk_rx_dst_set(struct sock *sk, const struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);
 
-	dst_hold(dst);
-	sk->sk_rx_dst = dst;
-	inet_sk(sk)->rx_dst_ifindex = skb->skb_iif;
+	if (dst_hold_safe(dst)) {
+		sk->sk_rx_dst = dst;
+		inet_sk(sk)->rx_dst_ifindex = skb->skb_iif;
+	}
 }
 EXPORT_SYMBOL(inet_sk_rx_dst_set);
 
@@ -2665,6 +2664,7 @@ static void get_tcp4_sock(struct sock *sk, struct seq_file *f, int i)
 	__be32 src = inet->inet_rcv_saddr;
 	__u16 destp = ntohs(inet->inet_dport);
 	__u16 srcp = ntohs(inet->inet_sport);
+	__u8 state = sk->sk_state;
 	int rx_queue;
 
 	if (icsk->icsk_pending == ICSK_TIME_RETRANS ||
@@ -2683,6 +2683,9 @@ static void get_tcp4_sock(struct sock *sk, struct seq_file *f, int i)
 		timer_expires = jiffies;
 	}
 
+	if (inet->transparent)
+		state |= 0x80;
+
 	if (sk->sk_state == TCP_LISTEN)
 		rx_queue = sk->sk_ack_backlog;
 	else
@@ -2693,7 +2696,7 @@ static void get_tcp4_sock(struct sock *sk, struct seq_file *f, int i)
 
 	seq_printf(f, "%4d: %08X:%04X %08X:%04X %02X %08X:%08X %02X:%08lX "
 			"%08X %5d %8d %lu %d %pK %lu %lu %u %u %d",
-		i, src, srcp, dest, destp, sk->sk_state,
+		i, src, srcp, dest, destp, state,
 		tp->write_seq - tp->snd_una,
 		rx_queue,
 		timer_active,
@@ -2896,42 +2899,18 @@ struct proto tcp_prot = {
 	.destroy_cgroup		= tcp_destroy_cgroup,
 	.proto_cgroup		= tcp_proto_cgroup,
 #endif
+	.diag_destroy		= tcp_abort,
 };
 EXPORT_SYMBOL(tcp_prot);
 
-static void __net_exit tcp_sk_exit(struct net *net)
-{
-	int cpu;
-
-	for_each_possible_cpu(cpu)
-		inet_ctl_sock_destroy(*per_cpu_ptr(net->ipv4.tcp_sk, cpu));
-	free_percpu(net->ipv4.tcp_sk);
-}
-
 static int __net_init tcp_sk_init(struct net *net)
 {
-	int res, cpu;
-
-	net->ipv4.tcp_sk = alloc_percpu(struct sock *);
-	if (!net->ipv4.tcp_sk)
-		return -ENOMEM;
-
-	for_each_possible_cpu(cpu) {
-		struct sock *sk;
-
-		res = inet_ctl_sock_create(&sk, PF_INET, SOCK_RAW,
-					   IPPROTO_TCP, net);
-		if (res)
-			goto fail;
-		*per_cpu_ptr(net->ipv4.tcp_sk, cpu) = sk;
-	}
 	net->ipv4.sysctl_tcp_ecn = 2;
 	return 0;
+}
 
-fail:
-	tcp_sk_exit(net);
-
-	return res;
+static void __net_exit tcp_sk_exit(struct net *net)
+{
 }
 
 static void __net_exit tcp_sk_exit_batch(struct list_head *net_exit_list)

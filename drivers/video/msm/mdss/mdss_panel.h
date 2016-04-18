@@ -25,6 +25,7 @@ struct panel_id {
 
 #define DEFAULT_FRAME_RATE	60
 #define DEFAULT_ROTATOR_FRAME_RATE 120
+#define ROTATOR_LOW_FRAME_RATE 30
 #define MDSS_DSI_RST_SEQ_LEN	10
 
 /* panel type list */
@@ -359,8 +360,8 @@ struct mdss_panel_info {
 	int blank_state;
 	bool hbm_feature_enabled;
 	bool hbm_state;
-	bool hbm_off_state;
 	bool is_split_display;
+	bool hbm_off_state;
 
 	uint32_t panel_dead;
 

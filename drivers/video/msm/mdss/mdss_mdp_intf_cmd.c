@@ -605,7 +605,7 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 		status = mask & readl_relaxed(ctl->mdata->mdp_base +
 				MDSS_MDP_REG_INTR_STATUS);
 		if (status) {
-			WARN(1, "pp done but irq not triggered\n");
+			pr_warn("pp done but irq not triggered\n");
 			mdss_mdp_irq_clear(ctl->mdata,
 					MDSS_MDP_IRQ_PING_PONG_COMP,
 					ctx->pp_num);
@@ -625,6 +625,7 @@ static int mdss_mdp_cmd_wait4pingpong(struct mdss_mdp_ctl *ctl, void *arg)
 			mdss_dsi_debug_check_te(pdata);
 			MDSS_XLOG_TOUT_HANDLER("mdp", "dsi0", "dsi1",
 				"dsi0_phy", "dsi1_phy", "panic");
+			mdss_fb_send_panel_reset_event(ctl->mfd);
 		}
 		ctx->pp_timeout_report_cnt++;
 		rc = -EPERM;

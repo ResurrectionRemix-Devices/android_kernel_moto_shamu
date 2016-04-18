@@ -179,7 +179,6 @@ static void __init smp_build_mpidr_hash(void)
 	__flush_dcache_area(&mpidr_hash, sizeof(struct mpidr_hash));
 }
 #endif
-
 struct cpuinfo_arm64 {
 	struct cpu	cpu;
 	u32		reg_midr;
@@ -453,6 +452,14 @@ static int c_show(struct seq_file *m, void *v)
 #ifdef CONFIG_SMP
 		seq_printf(m, "processor\t: %d\n", i);
 #endif
+	}
+
+	/* dump out the processor features */
+	seq_puts(m, "Features\t: ");
+
+	for (i = 0; hwcap_str[i]; i++)
+		if (elf_hwcap & (1 << i))
+			seq_printf(m, "%s ", hwcap_str[i]);
 		seq_printf(m, "BogoMIPS\t: %lu.%02lu\n",
 			   loops_per_jiffy / (500000UL/HZ),
 			   loops_per_jiffy / (5000UL/HZ) % 100);

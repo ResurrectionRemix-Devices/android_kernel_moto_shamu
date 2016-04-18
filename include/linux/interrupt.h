@@ -17,6 +17,7 @@
 
 #include <linux/atomic.h>
 #include <asm/ptrace.h>
+#include <asm/irq.h>
 
 /*
  * These correspond to the IORESOURCE_IRQ_* defines in
@@ -280,7 +281,7 @@ extern int irq_set_affinity_hint(unsigned int irq, const struct cpumask *m);
  * struct irq_affinity_notify - context for notification of IRQ affinity changes
  * @irq:		Interrupt to which notification applies
  * @kref:		Reference count, for internal use
- * @work:		Work item, for internal use
+ * @list:		Add to the notifier list, for internal use
  * @notify:		Function to be called on change.  This will be
  *			called in process context.
  * @release:		Function to be called on release.  This will be
@@ -291,7 +292,7 @@ extern int irq_set_affinity_hint(unsigned int irq, const struct cpumask *m);
 struct irq_affinity_notify {
 	unsigned int irq;
 	struct kref kref;
-	struct work_struct work;
+	struct list_head list;
 	void (*notify)(struct irq_affinity_notify *, const cpumask_t *mask);
 	void (*release)(struct kref *ref);
 };
@@ -299,6 +300,8 @@ struct irq_affinity_notify {
 extern int
 irq_set_affinity_notifier(unsigned int irq, struct irq_affinity_notify *notify);
 
+extern int
+irq_release_affinity_notifier(struct irq_affinity_notify *notify);
 #else /* CONFIG_SMP */
 
 static inline int irq_set_affinity(unsigned int irq, const struct cpumask *m)
@@ -480,6 +483,16 @@ struct softirq_action
 
 asmlinkage void do_softirq(void);
 asmlinkage void __do_softirq(void);
+
+#ifdef __ARCH_HAS_DO_SOFTIRQ
+void do_softirq_own_stack(void);
+#else
+static inline void do_softirq_own_stack(void)
+{
+	__do_softirq();
+}
+#endif
+
 extern void open_softirq(int nr, void (*action)(struct softirq_action *));
 extern void softirq_init(void);
 extern void __raise_softirq_irqoff(unsigned int nr);
@@ -544,7 +557,7 @@ static inline int tasklet_trylock(struct tasklet_struct *t)
 
 static inline void tasklet_unlock(struct tasklet_struct *t)
 {
-	smp_mb__before_clear_bit(); 
+	smp_mb__before_atomic();
 	clear_bit(TASKLET_STATE_RUN, &(t)->state);
 }
 
@@ -592,7 +605,7 @@ static inline void tasklet_hi_schedule_first(struct tasklet_struct *t)
 static inline void tasklet_disable_nosync(struct tasklet_struct *t)
 {
 	atomic_inc(&t->count);
-	smp_mb__after_atomic_inc();
+	smp_mb__after_atomic();
 }
 
 static inline void tasklet_disable(struct tasklet_struct *t)
@@ -604,13 +617,13 @@ static inline void tasklet_disable(struct tasklet_struct *t)
 
 static inline void tasklet_enable(struct tasklet_struct *t)
 {
-	smp_mb__before_atomic_dec();
+	smp_mb__before_atomic();
 	atomic_dec(&t->count);
 }
 
 static inline void tasklet_hi_enable(struct tasklet_struct *t)
 {
-	smp_mb__before_atomic_dec();
+	smp_mb__before_atomic();
 	atomic_dec(&t->count);
 }
 

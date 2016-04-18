@@ -1499,7 +1499,7 @@ static const struct file_operations proc_iface_stat_fmt_fops = {
 	.open		= proc_iface_stat_fmt_open,
 	.read		= seq_read,
 	.llseek		= seq_lseek,
-	.release	= seq_release,
+	.release	= seq_release_private,
 };
 
 static int __init iface_stat_init(struct proc_dir_entry *parent_procdir)
@@ -1661,6 +1661,7 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	struct sock *sk;
 	uid_t sock_uid;
 	bool res;
+	bool set_sk_callback_lock = false;
 
 	if (unlikely(module_passive))
 		return (info->match ^ info->invert) == 0;
@@ -1718,6 +1719,8 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	MT_DEBUG("qtaguid[%d]: sk=%p got_sock=%d fam=%d proto=%d\n",
 		 par->hooknum, sk, got_sock, par->family, ipx_proto(skb, par));
 	if (sk != NULL) {
+		set_sk_callback_lock = true;
+		read_lock_bh(&sk->sk_callback_lock);
 		MT_DEBUG("qtaguid[%d]: sk=%p->sk_socket=%p->file=%p\n",
 			par->hooknum, sk, sk->sk_socket,
 			sk->sk_socket ? sk->sk_socket->file : (void *)-1LL);
@@ -1797,6 +1800,8 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
 put_sock_ret_res:
 	if (got_sock)
 		xt_socket_put_sk(sk);
+	if (set_sk_callback_lock)
+		read_unlock_bh(&sk->sk_callback_lock);
 ret_res:
 	MT_DEBUG("qtaguid[%d]: left %d\n", par->hooknum, res);
 	return res;
@@ -2907,7 +2912,7 @@ static const struct file_operations proc_qtaguid_ctrl_fops = {
 	.read		= seq_read,
 	.write		= qtaguid_ctrl_proc_write,
 	.llseek		= seq_lseek,
-	.release	= seq_release,
+	.release	= seq_release_private,
 };
 
 static const struct seq_operations proc_qtaguid_stats_seqops = {

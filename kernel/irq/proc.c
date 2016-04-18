@@ -349,22 +349,22 @@ void register_handler_proc(unsigned int irq, struct irqaction *action)
 
 void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 {
-        static DEFINE_MUTEX(register_lock);
+	static DEFINE_MUTEX(register_lock);
 	char name [MAX_NAMELEN];
 
 	if (!root_irq_dir || (desc->irq_data.chip == &no_irq_chip))
 		return;
 
-        /*
-        * irq directories are registered only when a handler is
-        * added, not when the descriptor is created, so multiple
-        * tasks might try to register at the same time. 
-        */
-       mutex_lock(&register_lock);
+	/*
+	 * irq directories are registered only when a handler is
+	 * added, not when the descriptor is created, so multiple
+	 * tasks might try to register at the same time.
+	 */
+	mutex_lock(&register_lock);
 
-       if (desc->dir)
-               goto out_unlock;         
-               
+	if (desc->dir)
+		goto out_unlock;
+
 	memset(name, 0, MAX_NAMELEN);
 	sprintf(name, "%d", irq);
 
@@ -398,7 +398,7 @@ void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 			 &irq_wake_depth_proc_fops, (void *)(long)irq);
 
 out_unlock:
-       mutex_unlock(&register_lock);
+	mutex_unlock(&register_lock);
 }
 
 void unregister_irq_proc(unsigned int irq, struct irq_desc *desc)

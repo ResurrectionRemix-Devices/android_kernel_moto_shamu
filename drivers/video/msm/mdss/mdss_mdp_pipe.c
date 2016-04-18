@@ -556,6 +556,18 @@ static struct mdss_mdp_pipe *mdss_mdp_pipe_init(struct mdss_mdp_mixer *mixer,
 		break;
 	}
 
+	/* allocate lower priority right blend pipe */
+	if (left_blend_pipe && (left_blend_pipe->type == type) && pipe_pool) {
+		struct mdss_mdp_pipe *pool_head = pipe_pool + off;
+		off += left_blend_pipe->priority - pool_head->priority + 1;
+		if (off >= npipes) {
+			pr_warn("priority limitation. l_pipe:%d. no low priority %d pipe type available.\n",
+				left_blend_pipe->num, type);
+			pipe = ERR_PTR(-EBADSLT);
+			return pipe;
+		}
+	}
+
 	for (i = off; i < npipes; i++) {
 		pipe = pipe_pool + i;
 		if (atomic_read(&pipe->kref.refcount) == 0) {
@@ -1087,6 +1099,17 @@ static int mdss_mdp_image_setup(struct mdss_mdp_pipe *pipe,
 			pipe->img_width, height, pipe->img_height, src_xy);
 	}
 	img_size = (height << 16) | width;
+
+	/*
+	 * in solid fill, there is no src rectangle, but hardware needs to
+	 * be programmed same as dst to avoid issues in scaling blocks
+	 */
+	if (data == NULL) {
+		src_size = dst_size;
+		img_size = dst_size;
+		src_xy = 0;
+		decimation = 0;
+	}
 
 	if (IS_MDSS_MAJOR_MINOR_SAME(mdata->mdp_rev, MDSS_MDP_HW_REV_103) &&
 		pipe->bwc_mode) {

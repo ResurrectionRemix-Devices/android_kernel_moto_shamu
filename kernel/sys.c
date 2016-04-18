@@ -126,6 +126,7 @@ int C_A_D = 1;
 struct pid *cad_pid;
 EXPORT_SYMBOL(cad_pid);
 
+atomic_t reboot_triggered;
 /*
  * If set, this is used for preparing the system to power off.
  */
@@ -268,7 +269,7 @@ SYSCALL_DEFINE2(getpriority, int, which, int, who)
 			else
 				p = current;
 			if (p) {
-				niceval = 20 - task_nice(p);
+				niceval = nice_to_rlimit(task_nice(p));
 				if (niceval > retval)
 					retval = niceval;
 			}
@@ -279,7 +280,7 @@ SYSCALL_DEFINE2(getpriority, int, which, int, who)
 			else
 				pgrp = task_pgrp(current);
 			do_each_pid_thread(pgrp, PIDTYPE_PGID, p) {
-				niceval = 20 - task_nice(p);
+				niceval = nice_to_rlimit(task_nice(p));
 				if (niceval > retval)
 					retval = niceval;
 			} while_each_pid_thread(pgrp, PIDTYPE_PGID, p);
@@ -295,7 +296,7 @@ SYSCALL_DEFINE2(getpriority, int, which, int, who)
 
 			do_each_thread(g, p) {
 				if (uid_eq(task_uid(p), uid)) {
-					niceval = 20 - task_nice(p);
+					niceval = nice_to_rlimit(task_nice(p));
 					if (niceval > retval)
 						retval = niceval;
 				}
@@ -405,6 +406,10 @@ void kernel_restart(char *cmd)
 		printk(KERN_EMERG "Restarting system.\n");
 	else
 		printk(KERN_EMERG "Restarting system with command '%s'.\n", cmd);
+	printk(KERN_EMERG "Current task:%s(%d) Parent task:%s(%d)\n",
+		current->comm, current->pid,
+		current->real_parent->comm,
+		current->real_parent->pid);
 	kmsg_dump(KMSG_DUMP_RESTART);
 	machine_restart(cmd);
 }
@@ -448,10 +453,20 @@ void kernel_power_off(void)
 	migrate_to_reboot_cpu();
 	syscore_shutdown();
 	printk(KERN_EMERG "Power down.\n");
+	printk(KERN_EMERG "Current task:%s(%d) Parent task:%s(%d)\n",
+		current->comm, current->pid,
+		current->real_parent->comm,
+		current->real_parent->pid);
 	kmsg_dump(KMSG_DUMP_POWEROFF);
 	machine_power_off();
 }
 EXPORT_SYMBOL_GPL(kernel_power_off);
+
+int reboot_in_progress(void)
+{
+	return atomic_cmpxchg(&reboot_triggered, 0, 1);
+}
+EXPORT_SYMBOL_GPL(reboot_in_progress);
 
 static DEFINE_MUTEX(reboot_mutex);
 
@@ -490,6 +505,12 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
 	ret = reboot_pid_ns(pid_ns, cmd);
 	if (ret)
 		return ret;
+
+	/* return if reboot is already triggered */
+	if (atomic_cmpxchg(&reboot_triggered, 0, 1)) {
+		pr_err("Reboot already triggered\n");
+		return ret;
+	}
 
 	/* Instead of trying to make the power_off code look like
 	 * halt when pm_power_off is not set do it the easy way.

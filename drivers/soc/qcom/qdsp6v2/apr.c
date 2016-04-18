@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -30,7 +30,7 @@
 #include <soc/qcom/subsystem_notif.h>
 #include <soc/qcom/scm.h>
 #include <sound/apr_audio-v2.h>
-#include <mach/msm_smd.h>
+#include <soc/qcom/smd.h>
 #include <linux/qdsp6v2/apr.h>
 #include <linux/qdsp6v2/apr_tal.h>
 #include <linux/qdsp6v2/dsp_debug.h>
@@ -540,7 +540,7 @@ void apr_cb_func(void *buf, int len, void *priv)
 	if (data.payload_size > 0)
 		data.payload = (char *)hdr + hdr_size;
 
-	temp_port = ((data.src_port >> 8) * 8) + (data.src_port & 0xFF);
+	temp_port = ((data.dest_port >> 8) * 8) + (data.dest_port & 0xFF);
 	pr_debug("port = %d t_port = %d\n", data.src_port, temp_port);
 	if (c_svc->port_cnt && c_svc->port_fn[temp_port])
 		c_svc->port_fn[temp_port](&data,  c_svc->port_priv[temp_port]);
@@ -738,11 +738,11 @@ static int modem_notifier_cb(struct notifier_block *this, unsigned long code,
 	switch (code) {
 	case SUBSYS_BEFORE_SHUTDOWN:
 		pr_debug("M-Notify: Shutdown started\n");
-		apr_set_modem_state(APR_SUBSYS_DOWN);
-		dispatch_event(code, APR_DEST_MODEM);
 		break;
 	case SUBSYS_AFTER_SHUTDOWN:
 		pr_debug("M-Notify: Shutdown Completed\n");
+		apr_set_modem_state(APR_SUBSYS_DOWN);
+		dispatch_event(code, APR_DEST_MODEM);
 		break;
 	case SUBSYS_BEFORE_POWERUP:
 		pr_debug("M-notify: Bootup started\n");

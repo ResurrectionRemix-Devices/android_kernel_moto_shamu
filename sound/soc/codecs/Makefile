@@ -71,7 +71,7 @@ snd-soc-wcd9310-objs := wcd9310.o wcd9310-tables.o
 snd-soc-wcd9320-objs := wcd9320.o wcd9320-tables.o
 snd-soc-wcd9306-objs := wcd9306.o wcd9306-tables.o
 snd-soc-wcd9330-objs := wcd9330.o wcd9330-tables.o
-snd-soc-wcd9xxx-objs := wcd9xxx-resmgr.o wcd9xxx-mbhc.o wcd9xxx-common.o
+snd-soc-wcd9xxx-objs := wcd9xxx-resmgr.o wcd9xxx-mbhc.o wcd9xxx-common.o  wcdcal-hwdep.o
 snd-soc-msm8x10-wcd-objs := msm8x10-wcd.o msm8x10-wcd-tables.o wcd9xxx-common.o
 snd-soc-msm8x16-wcd-objs := msm8x16-wcd.o msm8x16-wcd-tables.o wcd-mbhc-v2.o
 snd-soc-wcd-cpe-objs := wcd_cpe_services.o wcd_cpe_core.o
@@ -272,3 +272,5 @@ obj-$(CONFIG_SND_SOC_MAX9877)	+= snd-soc-max9877.o
 obj-$(CONFIG_SND_SOC_TPA6130A2)	+= snd-soc-tpa6130a2.o
 obj-$(CONFIG_SND_SOC_TPA6165A2) += snd-soc-tpa6165a2.o
 obj-$(CONFIG_SND_SOC_FSA8500) += snd-soc-fsa8500.o
+
+obj-$(CONFIG_SOUND_CONTROL_HAX_3_GPL) += sound_control_3_gpl.o

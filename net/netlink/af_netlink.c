@@ -85,7 +85,7 @@ static inline int netlink_is_kernel(struct sock *sk)
 	return nlk_sk(sk)->flags & NETLINK_KERNEL_SOCKET;
 }
 
-struct netlink_table *nl_table;
+struct netlink_table *nl_table __read_mostly;
 EXPORT_SYMBOL_GPL(nl_table);
 
 static DECLARE_WAIT_QUEUE_HEAD(nl_table_wait);
@@ -586,7 +586,7 @@ static int netlink_mmap_sendmsg(struct sock *sk, struct msghdr *msg,
 	maxlen = ring->frame_size - NL_MMAP_HDRLEN;
 
 	do {
-                unsigned int nm_len;
+		unsigned int nm_len;
 
 		hdr = netlink_current_frame(ring, NL_MMAP_STATUS_VALID);
 		if (hdr == NULL) {
@@ -596,22 +596,22 @@ static int netlink_mmap_sendmsg(struct sock *sk, struct msghdr *msg,
 			continue;
 		}
 
-                nm_len = ACCESS_ONCE(hdr->nm_len);
-                if (nm_len > maxlen) {
+		nm_len = ACCESS_ONCE(hdr->nm_len);
+		if (nm_len > maxlen) {
 			err = -EINVAL;
 			goto out;
 		}
 
 		netlink_frame_flush_dcache(hdr, nm_len);
 
-                skb = alloc_skb(nm_len, GFP_KERNEL);
-                if (skb == NULL) {
-                        err = -ENOBUFS;
-                        goto out;
+		skb = alloc_skb(nm_len, GFP_KERNEL);
+		if (skb == NULL) {
+			err = -ENOBUFS;
+			goto out;
 		}
-                __skb_put(skb, nm_len);
-                memcpy(skb->data, (void *)hdr + NL_MMAP_HDRLEN, nm_len);
-                netlink_set_status(hdr, NL_MMAP_STATUS_UNUSED);
+		__skb_put(skb, nm_len);
+		memcpy(skb->data, (void *)hdr + NL_MMAP_HDRLEN, nm_len);
+		netlink_set_status(hdr, NL_MMAP_STATUS_UNUSED);
 
 		netlink_increment_head(ring);
 

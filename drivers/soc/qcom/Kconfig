@@ -41,6 +41,35 @@ config MSM_QMI_INTERFACE
 	  to perform QMI message marshaling and transport them over IPC
 	  Router.
 
+config MSM_RPM_SMD
+	depends on MSM_SMD
+	select MSM_MPM_OF
+	bool "RPM driver using SMD protocol"
+	help
+	  RPM is the dedicated hardware engine for managing shared SoC
+	  resources. This config adds driver support for using SMD as a
+	  transport layer communication with RPM hardware. It also selects
+	  the MSM_MPM config that programs the MPM module to monitor interrupts
+	  during sleep modes.
+
+config MSM_SMD
+	depends on MSM_SMEM
+	bool "MSM Shared Memory Driver (SMD)"
+	help
+	  Support for the shared memory interface between the apps
+	  processor and the baseband processor.  Provides access to
+	  the "shared heap", as well as virtual serial channels
+	  used to communicate with various services on the baseband
+	  processor.
+
+config MSM_SMD_DEBUG
+	depends on MSM_SMD
+	default y
+	bool "MSM SMD debug support"
+	help
+	  Support for debugging the SMD for communication
+	  between the ARM9 and ARM11
+
 config MSM_SMEM
 	depends on REMOTE_SPINLOCK_MSM
 	bool "MSM Shared Memory (SMEM)"
@@ -119,6 +148,14 @@ config MAXIMUM_CURRENT_THROTTLING
 	  The maximum current throttling driver enables application to
 	  turn on/off CPU based current throttling by setting the
 	  credit/upper limit in the CPU registers.
+
+config QCOM_EARLY_RANDOM
+	bool "Initialize random pool very early"
+	help
+	  The standard random pool may not initialize until late in the boot
+	  process which means that any calls to get random numbers before then
+	  may not be truly random. Select this option to make an early call
+	  to get some random data to put in the pool. If unsure, say N.
 
 source "drivers/soc/qcom/memshare/Kconfig"
 

@@ -17,6 +17,7 @@
 #include <sound/apr_audio-v2.h>
 #include <linux/list.h>
 #include <linux/msm_ion.h>
+#include <linux/spinlock.h>
 
 #define IN                      0x000
 #define OUT                     0x001
@@ -45,6 +46,7 @@
 #define FORMAT_AC3          0x0013
 #define FORMAT_EAC3         0x0014
 #define FORMAT_MP2          0x0015
+#define FORMAT_FLAC         0x0016
 
 #define ENCDEC_SBCBITRATE   0x0001
 #define ENCDEC_IMMEDIATE_DECODE 0x0002
@@ -169,6 +171,8 @@ struct audio_client {
 	/* Relative or absolute TS */
 	atomic_t	       time_flag;
 	atomic_t	       nowait_cmd_cnt;
+	struct list_head       no_wait_que;
+	spinlock_t             no_wait_que_spinlock;
 	atomic_t               mem_state;
 	void		       *priv;
 	uint32_t               io_mode;
@@ -187,6 +191,7 @@ struct audio_client {
 	/* audio cache operations fptr*/
 	int (*fptr_cache_ops)(struct audio_buffer *abuff, int cache_op);
 	atomic_t               unmap_cb_success;
+	atomic_t               reset;
 };
 
 void q6asm_audio_client_free(struct audio_client *ac);
@@ -371,6 +376,9 @@ int q6asm_media_format_block_wmapro(struct audio_client *ac,
 
 int q6asm_media_format_block_amrwbplus(struct audio_client *ac,
 			struct asm_amrwbplus_cfg *cfg);
+
+int q6asm_stream_media_format_block_flac(struct audio_client *ac,
+			struct asm_flac_cfg *cfg, int stream_id);
 
 int q6asm_ds1_set_endp_params(struct audio_client *ac,
 				int param_id, int param_value);

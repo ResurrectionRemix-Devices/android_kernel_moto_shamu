@@ -1,4 +1,4 @@
-/* Copyright (c) 2010-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -62,11 +62,27 @@ static void ci13xxx_msm_disconnect(void)
 	struct ci13xxx *udc = _udc;
 	struct usb_phy *phy = udc->transceiver;
 
-	if (phy && (phy->flags & ENABLE_DP_MANUAL_PULLUP))
+	if (phy && (phy->flags & ENABLE_DP_MANUAL_PULLUP)) {
+		u32 temp;
+
 		usb_phy_io_write(phy,
 				ULPI_MISC_A_VBUSVLDEXT |
 				ULPI_MISC_A_VBUSVLDEXTSEL,
 				ULPI_CLR(ULPI_MISC_A));
+
+		/* Notify LINK of VBUS LOW */
+		temp = readl_relaxed(USB_USBCMD);
+		temp &= ~USBCMD_SESS_VLD_CTRL;
+		writel_relaxed(temp, USB_USBCMD);
+
+		/*
+		 * Add memory barrier as it is must to complete
+		 * above USB PHY and Link register writes before
+		 * moving ahead with USB peripheral mode enumeration,
+		 * otherwise USB peripheral mode may not work.
+		 */
+		mb();
+	}
 }
 
 /* Link power management will reduce power consumption by
@@ -125,9 +141,15 @@ static void ci13xxx_msm_reset(void)
 	struct ci13xxx *udc = _udc;
 	struct usb_phy *phy = udc->transceiver;
 	struct device *dev = udc->gadget.dev.parent;
+	int	temp;
 
 	writel_relaxed(0, USB_AHBBURST);
 	writel_relaxed(0x08, USB_AHBMODE);
+
+	/* workaround for rx buffer collision issue */
+	temp = readl_relaxed(USB_GENCONFIG);
+	temp &= ~GENCONFIG_TXFIFO_IDLE_FORCE_DISABLE;
+	writel_relaxed(temp, USB_GENCONFIG);
 
 	if (udc->gadget.l1_supported)
 		ci13xxx_msm_set_l1(udc);
@@ -147,6 +169,23 @@ static void ci13xxx_msm_reset(void)
 		 */
 		mb();
 	}
+}
+
+static void ci13xxx_msm_mark_err_event(void)
+{
+	struct ci13xxx *udc = _udc;
+	struct msm_otg *otg;
+
+	if (udc == NULL)
+		return;
+
+	if (udc->transceiver == NULL)
+		return;
+
+	otg = container_of(udc->transceiver, struct msm_otg, phy);
+
+	/* This will trigger hardware reset before next connection */
+	otg->err_event_seen = true;
 }
 
 static void ci13xxx_msm_notify_event(struct ci13xxx *udc, unsigned event)
@@ -174,6 +213,10 @@ static void ci13xxx_msm_notify_event(struct ci13xxx *udc, unsigned event)
 	case CI13XXX_CONTROLLER_RESUME_EVENT:
 		dev_info(dev, "CI13XXX_CONTROLLER_RESUME_EVENT received\n");
 		ci13xxx_msm_resume();
+		break;
+	case CI13XXX_CONTROLLER_ERROR_EVENT:
+		dev_info(dev, "CI13XXX_CONTROLLER_ERROR_EVENT received\n");
+		ci13xxx_msm_mark_err_event();
 		break;
 
 	default:
@@ -377,6 +420,11 @@ int ci13xxx_msm_remove(struct platform_device *pdev)
 	return 0;
 }
 
+void ci13xxx_msm_shutdown(struct platform_device *pdev)
+{
+	ci13xxx_pullup(&_udc->gadget, 0);
+}
+
 void msm_hw_bam_disable(bool bam_disable)
 {
 	u32 val;
@@ -396,6 +444,7 @@ static struct platform_driver ci13xxx_msm_driver = {
 		.name = "msm_hsusb",
 	},
 	.remove = ci13xxx_msm_remove,
+	.shutdown = ci13xxx_msm_shutdown,
 };
 MODULE_ALIAS("platform:msm_hsusb");
 
