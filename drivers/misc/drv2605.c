@@ -998,28 +998,16 @@ static struct i2c_driver drv260x_driver = {
 
 static char read_val;
 
-static ssize_t drv260x_read(struct file *filp, char __user *buff, size_t length,
+static ssize_t drv260x_read(struct file *filp, char *buff, size_t length,
 			    loff_t * offset)
 {
-	size_t tocopy = min(length, sizeof(read_val));
-
-	if (copy_to_user(buff, &read_val, tocopy))
-		return -EFAULT;
-
-	return tocopy;
+	buff[0] = read_val;
+	return 1;
 }
 
-static ssize_t drv260x_write(struct file *filp, const char __user *buff, size_t len,
+static ssize_t drv260x_write(struct file *filp, const char *buff, size_t len,
 			     loff_t * off)
 {
-	char cmdid;
-
-	if (len < 1)
-		return -EINVAL;
-
-	if (copy_from_user(&cmdid, buff, 1))
-		return -EFAULT;
-
 	mutex_lock(&vibdata.lock);
 	hrtimer_cancel(&vibdata.timer);
 
@@ -1032,14 +1020,13 @@ static ssize_t drv260x_write(struct file *filp, const char __user *buff, size_t 
 		drv260x_standby();
 	}
 
-	switch (cmdid) {
+	switch (buff[0]) {
 	case HAPTIC_CMDID_PLAY_SINGLE_EFFECT:
 	case HAPTIC_CMDID_PLAY_EFFECT_SEQUENCE:
 		{
 			memset(&vibdata.sequence, 0, sizeof(vibdata.sequence));
 			if (!copy_from_user
-			    (&vibdata.sequence, &buff[1],
-			     min(len - 1, sizeof(vibdata.sequence)))) {
+			    (&vibdata.sequence, &buff[1], len - 1)) {
 				vibdata.should_stop = NO;
 				wake_lock(&vibdata.wklock);
 				schedule_work(&vibdata.work_play_eff);
@@ -1048,23 +1035,12 @@ static ssize_t drv260x_write(struct file *filp, const char __user *buff, size_t 
 		}
 	case HAPTIC_CMDID_PLAY_TIMED_EFFECT:
 		{
-			char data[2] = {0, 0};
 			unsigned int value = 0;
 			char mode;
 
-			if (len < (sizeof(data) + 1)) {
-				len = -EINVAL;
-				break;
-			}
-
-			if (copy_from_user(&data, &buff[1], sizeof(data))) {
-				len = -EFAULT;
-				break;
-			}
-
-			value = data[1];
+			value = buff[2];
 			value <<= 8;
-			value |= data[0];
+			value |= buff[1];
 
 			if (value) {
 				wake_lock(&vibdata.wklock);

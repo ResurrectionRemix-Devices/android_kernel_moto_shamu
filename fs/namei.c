@@ -2918,10 +2918,6 @@ opened:
 			goto exit_fput;
 	}
 out:
-	if (unlikely(error > 0)) {
-		WARN_ON(1);
-		error = -EINVAL;
-	}
 	if (got_write)
 		mnt_drop_write(nd->path.mnt);
 	path_put(&save_parent);

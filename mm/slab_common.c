@@ -186,11 +186,9 @@ kmem_cache_create_memcg(struct mem_cgroup *memcg, const char *name, size_t size,
 	 */
 	flags &= CACHE_CREATE_MASK;
 
-	if (!memcg) {
-		s = __kmem_cache_alias(name, size, align, flags, ctor);
-		if (s)
-			goto out_locked;
-	}
+	s = __kmem_cache_alias(memcg, name, size, align, flags, ctor);
+	if (s)
+		goto out_locked;
 
 	s = kmem_cache_zalloc(kmem_cache, GFP_KERNEL);
 	if (s) {
@@ -568,7 +566,7 @@ memcg_accumulate_slabinfo(struct kmem_cache *s, struct slabinfo *info)
 		return;
 
 	for_each_memcg_cache_index(i) {
-		c = cache_from_memcg_idx(s, i);
+		c = cache_from_memcg(s, i);
 		if (!c)
 			continue;
 

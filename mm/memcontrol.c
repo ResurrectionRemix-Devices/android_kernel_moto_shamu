@@ -3741,15 +3741,13 @@ static inline void mem_cgroup_destroy_all_caches(struct mem_cgroup *memcg)
  */
 void mem_cgroup_split_huge_fixup(struct page *head)
 {
-	struct page_cgroup *head_pc;
+	struct page_cgroup *head_pc = lookup_page_cgroup(head);
 	struct page_cgroup *pc;
 	struct mem_cgroup *memcg;
 	int i;
 
 	if (mem_cgroup_disabled())
 		return;
-
-	head_pc = lookup_page_cgroup(head);
 
 	memcg = head_pc->mem_cgroup;
 	for (i = 1; i < HPAGE_PMD_NR; i++) {
@@ -5792,17 +5790,16 @@ static void mem_cgroup_usage_unregister_event(struct cgroup *cgrp,
 swap_buffers:
 	/* Swap primary and spare array */
 	thresholds->spare = thresholds->primary;
-
-	rcu_assign_pointer(thresholds->primary, new);
-
-	/* To be sure that nobody uses thresholds */
-	synchronize_rcu();
-
 	/* If all events are unregistered, free the spare array */
 	if (!new) {
 		kfree(thresholds->spare);
 		thresholds->spare = NULL;
 	}
+
+	rcu_assign_pointer(thresholds->primary, new);
+
+	/* To be sure that nobody uses thresholds */
+	synchronize_rcu();
 unlock:
 	mutex_unlock(&memcg->thresholds_lock);
 }

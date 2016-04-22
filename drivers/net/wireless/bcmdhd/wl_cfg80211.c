@@ -1156,14 +1156,7 @@ wl_validate_wps_ie(char *wps_ie, s32 wps_ie_len, bool *pbc)
 		subelt_len = HTON16(val);
 
 		len -= 4;			/* for the attr id, attr len fields */
-
-		if (len < subelt_len) {
-			WL_ERR(("not enough data, len %d, subelt_len %d\n", len,
-				subelt_len));
-			break;
-		}
 		len -= subelt_len;	/* for the remaining fields in this attribute */
-
 		WL_DBG((" subel=%p, subelt_id=0x%x subelt_len=%u\n",
 			subel, subelt_id, subelt_len));
 
@@ -1178,12 +1171,10 @@ wl_validate_wps_ie(char *wps_ie, s32 wps_ie_len, bool *pbc)
 		} else if (subelt_id == WPS_ID_DEVICE_NAME) {
 			char devname[100];
 			size_t namelen = MIN(subelt_len, sizeof(devname));
-			if (namelen) {
-				memcpy(devname, subel, namelen);
-				devname[namelen - 1] = '\0';
-				WL_DBG(("  attr WPS_ID_DEVICE_NAME: %s (len %u)\n",
-					devname, subelt_len));
-			}
+			memcpy(devname, subel, namelen);
+			devname[namelen-1] = '\0';
+			WL_DBG(("  attr WPS_ID_DEVICE_NAME: %s (len %u)\n",
+				devname, subelt_len));
 		} else if (subelt_id == WPS_ID_DEVICE_PWD_ID) {
 			valptr[0] = *subel;
 			valptr[1] = *(subel + 1);
@@ -10743,7 +10734,7 @@ static void wl_deinit_priv(struct bcm_cfg80211 *cfg)
 }
 
 #if defined(WL_ENABLE_P2P_IF)
-static int wl_cfg80211_attach_p2p(struct bcm_cfg80211 *cfg)
+static s32 wl_cfg80211_attach_p2p(struct bcm_cfg80211 *cfg)
 {
 	WL_TRACE(("Enter \n"));
 
@@ -10755,11 +10746,30 @@ static int wl_cfg80211_attach_p2p(struct bcm_cfg80211 *cfg)
 	return 0;
 }
 
-static void wl_cfg80211_detach_p2p(struct bcm_cfg80211 *cfg)
+static s32  wl_cfg80211_detach_p2p(struct bcm_cfg80211 *cfg)
 {
-	WL_TRACE(("Enter \n"));
+	struct wireless_dev *wdev;
+
+	WL_DBG(("Enter \n"));
+	if (!cfg) {
+		WL_ERR(("Invalid Ptr\n"));
+		return -EINVAL;
+	} else
+		wdev = cfg->p2p_wdev;
+
+	if (!wdev) {
+		WL_ERR(("Invalid Ptr\n"));
+		return -EINVAL;
+	}
 
 	wl_cfgp2p_unregister_ndev(cfg);
+
+	cfg->p2p_wdev = NULL;
+	cfg->p2p_net = NULL;
+	WL_DBG(("Freeing 0x%08x \n", (unsigned int)wdev));
+	kfree(wdev);
+
+	return 0;
 }
 #endif
 

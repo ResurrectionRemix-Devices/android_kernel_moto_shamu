@@ -2435,18 +2435,14 @@ wl_cfgp2p_register_ndev(struct bcm_cfg80211 *cfg)
 s32
 wl_cfgp2p_unregister_ndev(struct bcm_cfg80211 *cfg)
 {
-	if (!cfg || !cfg->p2p_net || !cfg->p2p_wdev) {
+
+	if (!cfg || !cfg->p2p_net) {
 		CFGP2P_ERR(("Invalid Ptr\n"));
 		return -EINVAL;
 	}
 
 	unregister_netdev(cfg->p2p_net);
 	free_netdev(cfg->p2p_net);
-	cfg->p2p_net = NULL;
-
-	WL_DBG(("Freeing %p\n", cfg->wdev));
-	kfree(cfg->wdev);
-	cfg->p2p_wdev = NULL;
 
 	return 0;
 }

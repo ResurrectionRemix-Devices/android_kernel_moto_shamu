@@ -1546,11 +1546,10 @@ ttwu_do_wakeup(struct rq *rq, struct task_struct *p, int wake_flags)
 		u64 delta = rq->clock - rq->idle_stamp;
 		u64 max = 2*sysctl_sched_migration_cost;
 
-		update_avg(&rq->avg_idle, delta);
-
-		if (rq->avg_idle > max)
+		if (delta > max)
 			rq->avg_idle = max;
-
+		else
+			update_avg(&rq->avg_idle, delta);
 		rq->idle_stamp = 0;
 	}
 #endif
@@ -1845,6 +1844,7 @@ out:
  */
 int wake_up_process(struct task_struct *p)
 {
+	WARN_ON(task_is_stopped_or_traced(p));
 	return try_to_wake_up(p, TASK_NORMAL, 0);
 }
 EXPORT_SYMBOL(wake_up_process);
@@ -2159,9 +2159,6 @@ static void finish_task_switch(struct rq *rq, struct task_struct *prev)
 	if (mm)
 		mmdrop(mm);
 	if (unlikely(prev_state == TASK_DEAD)) {
-		if (prev->sched_class->task_dead)
-			prev->sched_class->task_dead(prev);
-
 		/*
 		 * Remove function-return probe instances associated with this
 		 * task and put them back on the free list.
@@ -5015,9 +5012,7 @@ SYSCALL_DEFINE2(sched_rr_get_interval, pid_t, pid,
 		goto out_unlock;
 
 	rq = task_rq_lock(p, &flags);
-	time_slice = 0;
-	if (p->sched_class->get_rr_interval)
-		time_slice = p->sched_class->get_rr_interval(rq, p);
+	time_slice = p->sched_class->get_rr_interval(rq, p);
 	task_rq_unlock(rq, p, &flags);
 
 	rcu_read_unlock();
@@ -5366,13 +5361,6 @@ static void migrate_tasks(unsigned int dead_cpu)
 	 * done here.
 	 */
 	rq->stop = NULL;
-
-	/*
-	 * put_prev_task() and pick_next_task() sched
-	 * class method both need to have an up-to-date
-	 * value of rq->clock[_task]
-	 */
-	update_rq_clock(rq);
 
 	for ( ; ; ) {
 		/*
