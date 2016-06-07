@@ -212,8 +212,6 @@ config CPU_FREQ_DEFAULT_GOV_DARKNESS
   	select CPU_FREQ_GOV_DARKNESS
   	help
 
-endchoice
-
 config CPU_FREQ_GOV_PERFORMANCE
 	tristate "'performance' governor"
 	help
