@@ -107,12 +107,10 @@ extern int dhd_change_mtu(dhd_pub_t *dhd, int new_mtu, int ifidx);
 extern int dhd_get_concurrent_capabilites(dhd_pub_t *dhd);
 #endif
 extern int dhd_socram_dump(struct dhd_bus *bus);
-#ifdef DNGL_EVENT_SUPPORT
 static void dngl_host_event_process(dhd_pub_t *dhdp, bcm_dngl_event_t *event,
 	bcm_dngl_event_msg_t *dngl_event, size_t pktlen);
 static int dngl_host_event(dhd_pub_t *dhdp, void *pktdata, bcm_dngl_event_msg_t *dngl_event,
 	size_t pktlen);
-#endif /* DNGL_EVENT_SUPPORT */
 
 bool ap_cfg_running = FALSE;
 bool ap_fw_loaded = FALSE;
@@ -1380,7 +1378,6 @@ wl_show_host_event(dhd_pub_t *dhd_pub, wl_event_msg_t *event, void *event_data,
 }
 #endif /* SHOW_EVENTS */
 
-#ifdef DNGL_EVENT_SUPPORT
 /* Check whether packet is a BRCM dngl event pkt. If it is, process event data. */
 int
 dngl_host_event(dhd_pub_t *dhdp, void *pktdata, bcm_dngl_event_msg_t *dngl_event, size_t pktlen)
@@ -1494,7 +1491,6 @@ dngl_host_event_process(dhd_pub_t *dhdp, bcm_dngl_event_t *event,
 	break;
 	}
 }
-#endif /* DNGL_EVENT_SUPPORT */
 
 /* Check whether packet is a BRCM event pkt. If it is, record event data. */
 int wl_host_event_get_data(void *pktdata, uint pktlen, bcm_event_msg_u_t *evu)
