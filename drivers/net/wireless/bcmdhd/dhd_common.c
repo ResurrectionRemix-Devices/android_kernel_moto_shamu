@@ -1542,10 +1542,8 @@ int wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata, size_t pktlen,
 	default:
 		return BCME_NOTFOUND;
 	}
-
 	/* start wl_event_msg process */
 	event_data = *data_ptr;
-
 
 	type = ntoh32_ua((void *)&event->event_type);
 	flags = ntoh16_ua((void *)&event->flags);
