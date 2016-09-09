@@ -1546,6 +1546,23 @@ int wl_host_event(dhd_pub_t *dhd_pub, int *ifidx, void *pktdata, size_t pktlen,
 	/* start wl_event_msg process */
 	event_data = *data_ptr;
 
+	usr_subtype = ntoh16_ua((void *)&pvt_data->bcm_hdr.usr_subtype);
+	switch (usr_subtype) {
+	case BCMILCP_BCM_SUBTYPE_EVENT:
+		memcpy(event, &evu.event, sizeof(wl_event_msg_t));
+		*data_ptr = &pvt_data[1];
+		break;
+
+	case BCMILCP_BCM_SUBTYPE_DNGLEVENT:
+		/* If it is a DNGL event process it first */
+		dngl_host_event(dhd_pub, pktdata, &evu.dngl_event, pktlen);
+
+		/* Return error purposely to prevent DNGL event being processed as BRCM event */
+		return BCME_ERROR;
+
+	default:
+		return BCME_NOTFOUND;
+	}
 
 	type = ntoh32_ua((void *)&event->event_type);
 	flags = ntoh16_ua((void *)&event->flags);
